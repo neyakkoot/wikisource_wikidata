@@ -1,0 +1,2505 @@
+// ============================================================
+// WikiSource Lexeme Creator
+// Tamil Dictionary -> Wikidata Lexeme
+//
+// Version:
+// - Dictionary table first-column extraction
+// - "=" headword extraction
+// - " - " headword extraction
+// - Exact Wikidata Lexeme checking
+// - Wiktionary POS detection
+// - Wikidata / Wiktionary / Commons via mw.ForeignApi
+// - Automatic Form F1 creation
+// - Wikimedia Commons pronunciation audio detection
+// - P443 pronunciation audio
+// - P407 Tamil language qualifier
+// - Next / Skip workflow
+// ============================================================
+
+(function () {
+    'use strict';
+
+    // ========================================================
+    // CONFIGURATION
+    // ========================================================
+
+    const Q_MAP = {
+        'Q5885': 'தமிழ் (Q5885)',
+        'Q1084': 'பெயர்ச்சொல் (Q1084)',
+        'Q24905': 'வினைச்சொல் (Q24905)',
+        'Q34698': 'உரிச்சொல் / பெயரடை (Q34698)',
+        'Q38005': 'வினையடை (Q38005)'
+    };
+
+    const LANG_TAMIL = 'Q5885';
+
+    // Pronunciation audio property
+    const P443_PRONUNCIATION_AUDIO = 'P443';
+
+    // Language of work/name qualifier
+    const P407_LANGUAGE = 'P407';
+
+    // Supported audio extensions
+    const AUDIO_EXTENSIONS = [
+        'ogg',
+        'oga',
+        'opus',
+        'wav',
+        'flac',
+        'mp3'
+    ];
+
+
+    // ========================================================
+    // GLOBAL VARIABLES
+    // ========================================================
+
+    let rawHeadwordsList = [];
+    let filteredLexemesList = [];
+    let currentIndex = 0;
+    let currentUser = '';
+
+    let wikidataApi = null;
+    let wiktionaryApi = null;
+    let commonsApi = null;
+
+    let csrfToken = '';
+
+
+    // ========================================================
+    // INITIALIZE FOREIGN APIs
+    // ========================================================
+
+    function initializeApis() {
+
+        wikidataApi = new mw.ForeignApi(
+            'https://www.wikidata.org/w/api.php'
+        );
+
+        wiktionaryApi = new mw.ForeignApi(
+            'https://ta.wiktionary.org/w/api.php'
+        );
+
+        commonsApi = new mw.ForeignApi(
+            'https://commons.wikimedia.org/w/api.php'
+        );
+    }
+
+
+    // ========================================================
+    // NORMALIZE WORD
+    // ========================================================
+
+    function normalizeTamilWord(text) {
+
+        if (!text) {
+            return '';
+        }
+
+        return String(text)
+            .normalize('NFC')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+
+    // ========================================================
+    // CHECK TAMIL TEXT
+    // ========================================================
+
+    function containsTamil(text) {
+
+        return /[\u0B80-\u0BFF]/.test(text || '');
+    }
+
+
+    // ========================================================
+    // EXTRACT Q-ID
+    // ========================================================
+
+    function extractQID(textVal) {
+
+        if (!textVal) {
+            return '';
+        }
+
+        const match = String(textVal).match(/(Q\d+)/i);
+
+        return match
+            ? match[1].toUpperCase()
+            : String(textVal).trim();
+    }
+
+
+    // ========================================================
+    // ADD WORD WITHOUT DUPLICATE
+    // ========================================================
+
+    function addHeadword(word) {
+
+        word = normalizeTamilWord(word);
+
+        if (!word) {
+            return;
+        }
+
+        if (!containsTamil(word)) {
+            return;
+        }
+
+        // Ignore obvious page/interface words
+        if (
+            word.includes('பக்கம்') ||
+            word.includes('அகராதி') ||
+            word.includes('உள்ளடக்கம்')
+        ) {
+            return;
+        }
+
+        if (word.length < 1) {
+            return;
+        }
+
+        const exists = rawHeadwordsList.some(function (item) {
+            return normalizeTamilWord(item.lemma) === word;
+        });
+
+        if (!exists) {
+
+            rawHeadwordsList.push({
+                lemma: word,
+                language: LANG_TAMIL,
+                lexicalCategory: 'Q1084',
+                inWiktionary: false,
+                wiktionaryContent: ''
+            });
+        }
+    }
+
+
+    // ========================================================
+    // EXTRACT HEADWORD FROM FIRST TABLE CELL
+    //
+    // Examples:
+    //
+    // தந்தி
+    //
+    // தந்தி art.(m)
+    //
+    // தந்தி
+    // art.(m)
+    // ta:r
+    // telegram
+    //
+    // Only first field/cell is used.
+    // ========================================================
+
+    function extractTamilWordsFromFirstField(text) {
+
+        if (!text) {
+            return [];
+        }
+
+        text = String(text)
+            .replace(/\u00A0/g, ' ')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .normalize('NFC');
+
+        const words = [];
+
+        const lines = text
+            .split(/\r?\n/)
+            .map(function (x) {
+                return x.trim();
+            })
+            .filter(Boolean);
+
+        lines.forEach(function (line) {
+
+            // ------------------------------------------------
+            // "=" format
+            //
+            // பாலை = நீரோட்டம், பிரிவு...
+            // ------------------------------------------------
+
+            if (line.includes('=')) {
+
+                line = line
+                    .split('=')[0]
+                    .trim();
+            }
+
+
+            // ------------------------------------------------
+            // "-" format
+            //
+            // பாலை - நீரோட்டம், பிரிவு...
+            //
+            // Only a spaced hyphen is treated as separator.
+            // ------------------------------------------------
+
+            const hyphenMatch = line.match(/^(.+?)\s+-\s+/);
+
+            if (hyphenMatch) {
+
+                line = hyphenMatch[1].trim();
+            }
+
+
+            line = normalizeTamilWord(line);
+
+            if (!line) {
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // Leading Tamil part
+            //
+            // தந்தி art.(m)
+            // தந்தி ta:r
+            // ------------------------------------------------
+
+            const tamilMatch = line.match(
+                /^([\u0B80-\u0BFF][\u0B80-\u0BFF\u0BCD\s]*)/
+            );
+
+            if (tamilMatch) {
+
+                let word = tamilMatch[1]
+                    .trim()
+                    .replace(/[.,:;|]+$/g, '')
+                    .trim();
+
+                if (
+                    word &&
+                    containsTamil(word)
+                ) {
+                    words.push(word);
+                }
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // Entire field is Tamil
+            // ------------------------------------------------
+
+            if (containsTamil(line)) {
+
+                words.push(line);
+            }
+        });
+
+        return words;
+    }
+
+
+    // ========================================================
+    // EXTRACT HEADWORDS FROM TABLES
+    //
+    // IMPORTANT:
+    // Only the FIRST CELL of each row is considered.
+    //
+    // Example:
+    //
+    // | தந்தி | art.(m) | ta:r | telegram |
+    //
+    // -> தந்தி
+    // ========================================================
+
+    function extractHeadwordsFromTables(contentArea) {
+
+        const result = [];
+
+        contentArea.find('table').each(function () {
+
+            const table = $(this);
+
+            table.find('tr').each(function () {
+
+                const row = $(this);
+
+                const firstCell = row
+                    .find('th, td')
+                    .first();
+
+                if (!firstCell.length) {
+                    return;
+                }
+
+                const text = firstCell.text();
+
+                const words =
+                    extractTamilWordsFromFirstField(text);
+
+                words.forEach(function (word) {
+                    result.push(word);
+                });
+            });
+        });
+
+        return result;
+    }
+
+
+    // ========================================================
+    // EXTRACT "=" AND "-" FORMAT FROM NORMAL TEXT
+    //
+    // Examples:
+    //
+    // பாலை = நீரோட்டம், பிரிவு, வெப்பம்
+    //
+    // பாலை - நீரோட்டம், பிரிவு, வெப்பம்
+    //
+    // -> பாலை
+    // ========================================================
+
+    function extractHeadwordsFromNormalText(contentArea) {
+
+        const result = [];
+
+        const clone = contentArea.clone();
+
+        // Tables are already handled separately
+        clone.find(
+            'table, script, style, noscript, ' +
+            '.printfooter, .mw-editsection, ' +
+            '.prp-page-header, .prp-page-footer'
+        ).remove();
+
+        const text = clone.text();
+
+        const lines = text
+            .split(/\r?\n/)
+            .map(function (x) {
+                return x.trim();
+            })
+            .filter(Boolean);
+
+
+        lines.forEach(function (line) {
+
+            if (!containsTamil(line)) {
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // "=" format
+            // ------------------------------------------------
+
+            if (line.includes('=')) {
+
+                const wordPart =
+                    line.split('=')[0].trim();
+
+                const words =
+                    extractTamilWordsFromFirstField(wordPart);
+
+                words.forEach(function (word) {
+                    result.push(word);
+                });
+
+                return;
+            }
+
+
+            // ------------------------------------------------
+            // "-" format
+            // ------------------------------------------------
+
+            const hyphenMatch =
+                line.match(/^(.+?)\s+-\s+/);
+
+            if (hyphenMatch) {
+
+                const wordPart =
+                    hyphenMatch[1].trim();
+
+                const words =
+                    extractTamilWordsFromFirstField(wordPart);
+
+                words.forEach(function (word) {
+                    result.push(word);
+                });
+
+                return;
+            }
+        });
+
+        return result;
+    }
+
+
+    // ========================================================
+    // MAIN DICTIONARY HEADWORD EXTRACTION
+    // ========================================================
+
+    function extractDictionaryHeadwords() {
+
+        const contentArea =
+            $('#mw-content-text').clone();
+
+        contentArea.find(
+            '.printfooter, .mw-editsection, ' +
+            'style, script, .prp-page-header, ' +
+            '.prp-page-footer'
+        ).remove();
+
+
+        const allWords = [];
+
+
+        // ----------------------------------------------------
+        // 1. TABLE FIRST-COLUMN WORDS
+        // ----------------------------------------------------
+
+        extractHeadwordsFromTables(
+            contentArea
+        ).forEach(function (word) {
+
+            allWords.push(word);
+        });
+
+
+        // ----------------------------------------------------
+        // 2. "=" AND "-" FORMAT
+        // ----------------------------------------------------
+
+        extractHeadwordsFromNormalText(
+            contentArea
+        ).forEach(function (word) {
+
+            allWords.push(word);
+        });
+
+
+        // ----------------------------------------------------
+        // 3. Normalize + remove duplicates
+        // ----------------------------------------------------
+
+        const uniqueWords = [];
+        const seen = new Set();
+
+        allWords.forEach(function (word) {
+
+            word = normalizeTamilWord(word);
+
+            if (!word) {
+                return;
+            }
+
+            if (!containsTamil(word)) {
+                return;
+            }
+
+            if (!seen.has(word)) {
+
+                seen.add(word);
+                uniqueWords.push(word);
+            }
+        });
+
+
+        return uniqueWords;
+    }
+
+
+    // ========================================================
+    // ADD IMPORT BUTTON
+    // ========================================================
+
+    function addImportButton() {
+
+        if ($('#import-lexeme-btn').length > 0) {
+            return;
+        }
+
+
+        const btn = $('<button>', {
+            id: 'import-lexeme-btn',
+            text: 'அகராதிச் சொற்களை விக்கித்தரவில் இணை'
+        });
+
+
+        btn.css({
+            'margin': '10px 0',
+            'padding': '8px 12px',
+            'background-color': '#00af89',
+            'color': '#fff',
+            'border': 'none',
+            'border-radius': '4px',
+            'cursor': 'pointer',
+            'font-weight': 'bold',
+            'z-index': '9999'
+        });
+
+
+        btn.click(processDictionaryPage);
+
+
+        if ($('#bodyContent').length) {
+
+            $('#bodyContent').prepend(btn);
+
+        } else {
+
+            $('#mw-content-text').before(btn);
+        }
+    }
+
+
+    // ========================================================
+    // PROCESS DICTIONARY PAGE
+    // ========================================================
+
+    function processDictionaryPage() {
+
+        currentUser =
+            mw.config.get('wgUserName');
+
+
+        if (!currentUser) {
+
+            alert(
+                'இந்தப் பங்களிப்பு உங்கள் கணக்கில் சேர ' +
+                'நீங்கள் முதலில் உள்நுழைய வேண்டும்.'
+            );
+
+            return;
+        }
+
+
+        rawHeadwordsList = [];
+        filteredLexemesList = [];
+        currentIndex = 0;
+
+
+        // ----------------------------------------------------
+        // Extract dictionary words
+        // ----------------------------------------------------
+
+        const words =
+            extractDictionaryHeadwords();
+
+
+        words.forEach(function (word) {
+
+            addHeadword(word);
+        });
+
+
+        if (rawHeadwordsList.length === 0) {
+
+            alert(
+                'அகராதித் தலைப்புச் சொற்கள் எதுவும் ' +
+                'கண்டறியப்படவில்லை.'
+            );
+
+            return;
+        }
+
+
+        $('#import-lexeme-btn')
+            .text(
+                'விக்கித்தரவு சரிபார்க்கப்படுகிறது...'
+            )
+            .prop('disabled', true);
+
+
+        // ----------------------------------------------------
+        // Get Wikidata CSRF token
+        // ----------------------------------------------------
+
+        getWikidataToken()
+            .then(function () {
+
+                return filterUncreatedLexemes();
+            })
+            .then(function () {
+
+                if (
+                    filteredLexemesList.length === 0
+                ) {
+
+                    alert(
+                        'இப்பக்கத்தில் உள்ள அனைத்து ' +
+                        'அகராதிச் சொற்களும் ஏற்கனவே ' +
+                        'விக்கித்தரவில் உருவாக்கப்பட்டுவிட்டன!'
+                    );
+
+                    $('#import-lexeme-btn')
+                        .text(
+                            'அகராதிச் சொற்களை ' +
+                            'விக்கித்தரவில் இணை'
+                        )
+                        .prop('disabled', false);
+
+                    return;
+                }
+
+
+                return batchFetchWiktionaryPOS();
+            })
+            .then(function (completed) {
+
+                if (completed === false) {
+                    return;
+                }
+
+                showInteractiveModal();
+            })
+            .catch(function (error) {
+
+                console.error(error);
+
+                $('#import-lexeme-btn')
+                    .text(
+                        'அகராதிச் சொற்களை ' +
+                        'விக்கித்தரவில் இணை'
+                    )
+                    .prop('disabled', false);
+
+                alert(
+                    'API தொடர்பில் பிழை ஏற்பட்டுள்ளது.\n\n' +
+                    (error.message || error)
+                );
+            });
+    }
+
+
+    // ========================================================
+    // GET WIKIDATA CSRF TOKEN
+    // ========================================================
+
+    function getWikidataToken() {
+
+        return wikidataApi.get({
+
+            action: 'query',
+
+            meta: 'tokens',
+
+            type: 'csrf',
+
+            assert: 'user',
+
+            formatversion: 2
+
+        }).then(function (data) {
+
+            if (
+                data &&
+                data.query &&
+                data.query.tokens &&
+                data.query.tokens.csrftoken
+            ) {
+
+                csrfToken =
+                    data.query.tokens.csrftoken;
+
+                return true;
+            }
+
+
+            throw new Error(
+                'விக்கித்தரவு CSRF token பெற முடியவில்லை.'
+            );
+        });
+    }
+
+
+    // ========================================================
+    // CHECK WHETHER EXACT WIKIDATA LEXEME EXISTS
+    // ========================================================
+
+    function checkExactWikidataLexeme(word) {
+
+        return wikidataApi.get({
+
+            action: 'wbsearchentities',
+
+            search: word,
+
+            language: 'ta',
+
+            type: 'lexeme',
+
+            limit: 20,
+
+            formatversion: 2
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !Array.isArray(data.search)
+            ) {
+                return false;
+            }
+
+
+            const normalizedSearchWord =
+                normalizeTamilWord(word);
+
+
+            return data.search.some(function (result) {
+
+                const label =
+                    normalizeTamilWord(
+                        result.label || ''
+                    );
+
+                return (
+                    label === normalizedSearchWord
+                );
+            });
+        });
+    }
+
+
+    // ========================================================
+    // FILTER EXISTING LEXEMES
+    // ========================================================
+
+    function filterUncreatedLexemes() {
+
+        const promises =
+            rawHeadwordsList.map(function (item) {
+
+                return checkExactWikidataLexeme(
+                    item.lemma
+                )
+                .then(function (exists) {
+
+                    if (!exists) {
+
+                        return item;
+                    }
+
+                    return null;
+                })
+                .catch(function (error) {
+
+                    console.warn(
+                        'Wikidata check failed:',
+                        item.lemma,
+                        error
+                    );
+
+                    // If search fails, keep the word
+                    // so that it can be manually handled.
+                    return item;
+                });
+            });
+
+
+        return Promise.all(promises)
+            .then(function (results) {
+
+                filteredLexemesList =
+                    results.filter(function (item) {
+                        return item !== null;
+                    });
+
+
+                $('#import-lexeme-btn')
+                    .text(
+                        'அகராதிச் சொற்களை ' +
+                        'விக்கித்தரவில் இணை'
+                    )
+                    .prop('disabled', false);
+
+
+                return true;
+            });
+    }
+
+
+    // ========================================================
+    // GET WIKTIONARY PAGE
+    // ========================================================
+
+    function getWiktionaryPage(word) {
+
+        return wiktionaryApi.get({
+
+            action: 'query',
+
+            titles: word,
+
+            redirects: 1,
+
+            prop: 'info|revisions',
+
+            rvprop: 'content',
+
+            rvslots: 'main',
+
+            formatversion: 2
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !data.query ||
+                !Array.isArray(data.query.pages)
+            ) {
+
+                return {
+                    exists: false,
+                    content: ''
+                };
+            }
+
+
+            const page =
+                data.query.pages[0];
+
+
+            if (
+                !page ||
+                page.missing !== undefined
+            ) {
+
+                return {
+                    exists: false,
+                    content: ''
+                };
+            }
+
+
+            let content = '';
+
+
+            try {
+
+                if (
+                    page.revisions &&
+                    page.revisions[0] &&
+                    page.revisions[0].slots &&
+                    page.revisions[0].slots.main
+                ) {
+
+                    content =
+                        page.revisions[0]
+                            .slots.main.content || '';
+
+                } else if (
+                    page.revisions &&
+                    page.revisions[0]
+                ) {
+
+                    // Old API fallback
+
+                    content =
+                        page.revisions[0].content || '';
+                }
+
+            } catch (e) {
+
+                content = '';
+            }
+
+
+            return {
+                exists: true,
+                content: content,
+                title: page.title || word
+            };
+        });
+    }
+
+
+    // ========================================================
+    // DETECT WIKTIONARY POS
+    // ========================================================
+
+    function detectLexicalCategory(content) {
+
+        if (!content) {
+            return 'Q1084';
+        }
+
+
+        // Noun
+        if (
+            content.includes('{{பெயர்ச்சொல்}}') ||
+            content.includes('=== பெயர்ச்சொல் ===') ||
+            content.includes('{{noun}}')
+        ) {
+
+            return 'Q1084';
+        }
+
+
+        // Verb
+        if (
+            content.includes('{{வினைச்சொல்}}') ||
+            content.includes('=== வினைச்சொல் ===') ||
+            content.includes('{{verb}}')
+        ) {
+
+            return 'Q24905';
+        }
+
+
+        // Adjective
+        if (
+            content.includes('{{பெயரடை}}') ||
+            content.includes('=== பெயரடை ===') ||
+            content.includes('{{adjective}}')
+        ) {
+
+            return 'Q34698';
+        }
+
+
+        // Adverb
+        if (
+            content.includes('{{வினையடை}}') ||
+            content.includes('=== வினையடை ===') ||
+            content.includes('{{adverb}}')
+        ) {
+
+            return 'Q38005';
+        }
+
+
+        return 'Q1084';
+    }
+
+
+    // ========================================================
+    // FETCH WIKTIONARY DATA FOR ALL WORDS
+    // ========================================================
+
+    function batchFetchWiktionaryPOS() {
+
+        const promises =
+            filteredLexemesList.map(function (item) {
+
+                return getWiktionaryPage(
+                    item.lemma
+                )
+                .then(function (result) {
+
+                    if (result.exists) {
+
+                        item.inWiktionary = true;
+
+                        item.wiktionaryContent =
+                            result.content || '';
+
+                        item.wiktionaryTitle =
+                            result.title || item.lemma;
+
+                        item.lexicalCategory =
+                            detectLexicalCategory(
+                                result.content
+                            );
+
+                    } else {
+
+                        item.inWiktionary = false;
+
+                        item.wiktionaryContent = '';
+
+                        item.wiktionaryTitle =
+                            item.lemma;
+                    }
+
+                    return item;
+                })
+                .catch(function (error) {
+
+                    console.warn(
+                        'Wiktionary check failed:',
+                        item.lemma,
+                        error
+                    );
+
+                    item.inWiktionary = false;
+
+                    item.wiktionaryContent = '';
+
+                    return item;
+                });
+            });
+
+
+        return Promise.all(promises)
+            .then(function () {
+
+                return true;
+            });
+    }
+
+
+    // ========================================================
+    // COMMONS: CHECK ONE FILE
+    // ========================================================
+
+    function checkCommonsAudioFile(fileName) {
+
+        if (!fileName) {
+            return Promise.resolve(null);
+        }
+
+
+        return commonsApi.get({
+
+            action: 'query',
+
+            titles: 'File:' + fileName,
+
+            prop: 'imageinfo',
+
+            iiprop: 'mime',
+
+            formatversion: 2
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !data.query ||
+                !Array.isArray(data.query.pages)
+            ) {
+
+                return null;
+            }
+
+
+            const page =
+                data.query.pages[0];
+
+
+            if (
+                !page ||
+                page.missing !== undefined
+            ) {
+
+                return null;
+            }
+
+
+            if (
+                !page.imageinfo ||
+                !page.imageinfo.length
+            ) {
+
+                return null;
+            }
+
+
+            const mime =
+                page.imageinfo[0].mime || '';
+
+
+            if (
+                mime.toLowerCase()
+                    .indexOf('audio/') === 0
+            ) {
+
+                return fileName;
+            }
+
+
+            return null;
+        })
+        .catch(function (error) {
+
+            console.warn(
+                'Commons audio check failed:',
+                fileName,
+                error
+            );
+
+            return null;
+        });
+    }
+
+
+    // ========================================================
+    // COMMONS: SEARCH STANDARD TAMIL AUDIO FILENAMES
+    //
+    // Examples:
+    //
+    // Ta-பீச்சி.ogg
+    // Ta-பீச்சி.wav
+    // Ta-பீச்சி.mp3
+    // ========================================================
+
+    function findStandardCommonsAudio(word) {
+
+        const candidateFiles =
+            AUDIO_EXTENSIONS.map(function (extension) {
+
+                return 'Ta-' +
+                    word +
+                    '.' +
+                    extension;
+            });
+
+
+        return commonsApi.get({
+
+            action: 'query',
+
+            titles: candidateFiles.join('|'),
+
+            prop: 'imageinfo',
+
+            iiprop: 'mime',
+
+            formatversion: 2
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !data.query ||
+                !Array.isArray(data.query.pages)
+            ) {
+
+                return null;
+            }
+
+
+            for (
+                let i = 0;
+                i < data.query.pages.length;
+                i++
+            ) {
+
+                const page =
+                    data.query.pages[i];
+
+
+                if (
+                    !page ||
+                    page.missing !== undefined
+                ) {
+                    continue;
+                }
+
+
+                if (
+                    !page.imageinfo ||
+                    !page.imageinfo.length
+                ) {
+                    continue;
+                }
+
+
+                const mime =
+                    page.imageinfo[0].mime || '';
+
+
+                if (
+                    mime.toLowerCase()
+                        .indexOf('audio/') === 0
+                ) {
+
+                    let fileName =
+                        page.title || '';
+
+
+                    fileName =
+                        fileName.replace(
+                            /^File:/i,
+                            ''
+                        );
+
+
+                    return fileName;
+                }
+            }
+
+
+            return null;
+        })
+        .catch(function (error) {
+
+            console.warn(
+                'Commons standard audio search failed:',
+                word,
+                error
+            );
+
+            return null;
+        });
+    }
+
+
+    // ========================================================
+    // EXTRACT AUDIO FILENAMES FROM WIKTIONARY CONTENT
+    //
+    // Supports:
+    //
+    // [[File:Ta-பீச்சி.ogg]]
+    // [[படிமம்:Ta-பீச்சி.ogg]]
+    // [[commons:File:Ta-பீச்சி.ogg]]
+    // ========================================================
+
+    function extractAudioFilesFromWiktionary(content) {
+
+        if (!content) {
+            return [];
+        }
+
+
+        const results = [];
+
+
+        const regex =
+            /(?:commons\s*:\s*)?(?:File|படிமம்)\s*:\s*([^|\]\n<>"]+\.(?:ogg|oga|opus|wav|flac|mp3))/gi;
+
+
+        let match;
+
+
+        while (
+            (match = regex.exec(content)) !== null
+        ) {
+
+            const fileName =
+                match[1].trim();
+
+
+            if (
+                fileName &&
+                !results.includes(fileName)
+            ) {
+
+                results.push(fileName);
+            }
+        }
+
+
+        return results;
+    }
+
+
+    // ========================================================
+    // FIND AUDIO REFERENCED BY WIKTIONARY
+    // ========================================================
+
+    function findWiktionaryAudio(content) {
+
+        const files =
+            extractAudioFilesFromWiktionary(
+                content
+            );
+
+
+        if (!files.length) {
+
+            return Promise.resolve(null);
+        }
+
+
+        // Check one by one.
+        // The first confirmed Commons audio file wins.
+
+        let promise =
+            Promise.resolve(null);
+
+
+        files.forEach(function (fileName) {
+
+            promise = promise.then(function (found) {
+
+                if (found) {
+                    return found;
+                }
+
+                return checkCommonsAudioFile(
+                    fileName
+                );
+            });
+        });
+
+
+        return promise;
+    }
+
+
+    // ========================================================
+    // FIND COMMONS PRONUNCIATION AUDIO
+    //
+    // Priority:
+    //
+    // 1. Standard Ta-word.ext filename
+    // 2. Audio linked from Wiktionary
+    // ========================================================
+
+    function findCommonsPronunciationAudio(
+        word,
+        wiktionaryContent
+    ) {
+
+        return findStandardCommonsAudio(word)
+            .then(function (standardAudio) {
+
+                if (standardAudio) {
+                    return standardAudio;
+                }
+
+
+                return findWiktionaryAudio(
+                    wiktionaryContent
+                );
+            });
+    }
+
+
+    // ========================================================
+    // BUILD P443 CLAIM
+    // ========================================================
+
+    function buildPronunciationAudioClaim(
+        audioFileName
+    ) {
+
+        return {
+
+            mainsnak: {
+
+                snaktype: 'value',
+
+                property:
+                    P443_PRONUNCIATION_AUDIO,
+
+                datavalue: {
+
+                    value: audioFileName,
+
+                    type: 'string'
+                }
+            },
+
+            type: 'statement',
+
+            rank: 'normal',
+
+            qualifiers: {
+
+                P407: [
+
+                    {
+
+                        snaktype: 'value',
+
+                        property:
+                            P407_LANGUAGE,
+
+                        datavalue: {
+
+                            value: {
+
+                                'entity-type': 'item',
+
+                                'numeric-id': 5885,
+
+                                'id': 'Q5885'
+                            },
+
+                            type: 'wikibase-entityid'
+                        }
+                    }
+                ]
+            },
+
+            'qualifiers-order': [
+                'P407'
+            ]
+        };
+    }
+
+
+    // ========================================================
+    // SHOW INTERACTIVE MODAL
+    // ========================================================
+
+    function showInteractiveModal() {
+
+        $('#lexeme-modal-overlay').remove();
+
+
+        const wordsOverview =
+            filteredLexemesList
+                .map(function (item, idx) {
+
+                    return (
+                        (idx + 1) +
+                        '. ' +
+                        item.lemma
+                    );
+                })
+                .join(', ');
+
+
+        const modalHTML = `
+
+            <div id="lexeme-modal-overlay"
+                 style="
+                 position:fixed;
+                 top:0;
+                 left:0;
+                 width:100%;
+                 height:100%;
+                 background:rgba(0,0,0,0.6);
+                 z-index:10000;
+                 display:flex;
+                 align-items:center;
+                 justify-content:center;
+                 font-family:sans-serif;
+                 ">
+
+                <div
+                    style="
+                    background:#fff;
+                    width:520px;
+                    max-width:92%;
+                    max-height:90vh;
+                    overflow-y:auto;
+                    padding:24px;
+                    border-radius:8px;
+                    box-shadow:0 4px 12px rgba(0,0,0,0.3);
+                    position:relative;
+                    "
+                >
+
+                    <button
+                        id="modal-close-btn"
+                        style="
+                        position:absolute;
+                        top:12px;
+                        right:12px;
+                        border:none;
+                        background:none;
+                        font-size:18px;
+                        cursor:pointer;
+                        "
+                    >✖</button>
+
+
+                    <div
+                        style="
+                        font-size:13px;
+                        color:#555;
+                        background:#f8f9fa;
+                        padding:8px;
+                        border-radius:4px;
+                        margin-bottom:12px;
+                        max-height:70px;
+                        overflow-y:auto;
+                        "
+                    >
+                        <strong>
+                            விக்கித்தரவில் இல்லாத சொற்கள்
+                            (${filteredLexemesList.length}):
+                        </strong>
+                        <br>
+                        ${wordsOverview}
+                    </div>
+
+
+                    <h2
+                        style="
+                        margin-top:0;
+                        font-size:20px;
+                        border-bottom:1px solid #ccc;
+                        padding-bottom:8px;
+                        "
+                    >
+                        Create a new Lexeme
+                        (<span id="current-step-num">1</span>/${filteredLexemesList.length})
+                    </h2>
+
+
+                    <div
+                        id="wiktionary-status-box"
+                        style="
+                        padding:10px;
+                        font-size:12px;
+                        border-radius:4px;
+                        margin-bottom:12px;
+                        background:#eaf3ff;
+                        border:1px solid #36c;
+                        color:#000;
+                        "
+                    >
+                        📖 விக்சனரித் தரவு ஏற்றப்படுகிறது...
+                    </div>
+
+
+                    <div
+                        id="audio-status-box"
+                        style="
+                        padding:10px;
+                        font-size:12px;
+                        border-radius:4px;
+                        margin-bottom:12px;
+                        background:#f8f9fa;
+                        border:1px solid #ccc;
+                        color:#555;
+                        "
+                    >
+                        🔊 Commons ஒலிக்கோப்பு:
+                        <strong>உருவாக்கும்போது சரிபார்க்கப்படும்</strong>
+                    </div>
+
+
+                    <form
+                        id="lexeme-form"
+                        style="
+                        display:flex;
+                        flex-direction:column;
+                        gap:12px;
+                        "
+                    >
+
+                        <div>
+                            <label
+                                style="
+                                font-weight:bold;
+                                display:block;
+                                margin-bottom:4px;
+                                "
+                            >
+                                Lemma *
+                            </label>
+
+                            <input
+                                type="text"
+                                id="input-lemma"
+                                style="
+                                width:100%;
+                                padding:8px;
+                                border:1px solid #ccc;
+                                border-radius:4px;
+                                box-sizing:border-box;
+                                "
+                                required
+                            />
+                        </div>
+
+
+                        <div>
+                            <label
+                                style="
+                                font-weight:bold;
+                                display:block;
+                                margin-bottom:4px;
+                                "
+                            >
+                                Lexeme's language *
+                            </label>
+
+                            <input
+                                type="text"
+                                id="input-language"
+                                style="
+                                width:100%;
+                                padding:8px;
+                                border:1px solid #ccc;
+                                border-radius:4px;
+                                box-sizing:border-box;
+                                "
+                                required
+                            />
+                        </div>
+
+
+                        <div>
+                            <label
+                                style="
+                                font-weight:bold;
+                                display:block;
+                                margin-bottom:4px;
+                                "
+                            >
+                                Lexical category *
+                            </label>
+
+                            <input
+                                type="text"
+                                id="input-category"
+                                style="
+                                width:100%;
+                                padding:8px;
+                                border:1px solid #ccc;
+                                border-radius:4px;
+                                box-sizing:border-box;
+                                "
+                                required
+                            />
+                        </div>
+
+
+                        <p
+                            style="
+                            font-size:11px;
+                            color:#555;
+                            margin:4px 0;
+                            "
+                        >
+                            By clicking "Create Lexeme", you agree
+                            to the terms of use, and you irrevocably
+                            agree to release your contribution under
+                            the Creative Commons CC0 License.
+                        </p>
+
+
+                        <div
+                            style="
+                            display:flex;
+                            justify-content:space-between;
+                            align-items:center;
+                            margin-top:8px;
+                            "
+                        >
+
+                            <button
+                                type="button"
+                                id="skip-lexeme-btn"
+                                style="
+                                padding:8px 16px;
+                                background:#72777d;
+                                color:#fff;
+                                border:none;
+                                border-radius:4px;
+                                cursor:pointer;
+                                "
+                            >
+                                தவிர் (Skip)
+                            </button>
+
+
+                            <button
+                                type="button"
+                                id="submit-lexeme-btn"
+                                style="
+                                padding:8px 16px;
+                                background:#36c;
+                                color:#fff;
+                                border:none;
+                                border-radius:4px;
+                                cursor:pointer;
+                                font-weight:bold;
+                                "
+                            >
+                                Create Lexeme
+                            </button>
+
+                        </div>
+
+                    </form>
+
+
+                    <div
+                        id="status-msg"
+                        style="
+                        margin-top:10px;
+                        font-weight:bold;
+                        font-size:13px;
+                        text-align:center;
+                        "
+                    ></div>
+
+                </div>
+            </div>
+        `;
+
+
+        $('body').append(modalHTML);
+
+
+        loadCurrentWordToForm();
+
+
+        $('#modal-close-btn').click(function () {
+
+            $('#lexeme-modal-overlay').remove();
+        });
+
+
+        $('#submit-lexeme-btn')
+            .click(submitCurrentLexeme);
+
+
+        $('#skip-lexeme-btn')
+            .click(function () {
+
+                nextWord();
+            });
+    }
+
+
+    // ========================================================
+    // LOAD CURRENT WORD
+    // ========================================================
+
+    function loadCurrentWordToForm() {
+
+        const item =
+            filteredLexemesList[currentIndex];
+
+
+        if (!item) {
+            return;
+        }
+
+
+        $('#current-step-num')
+            .text(currentIndex + 1);
+
+
+        $('#input-lemma')
+            .val(item.lemma);
+
+
+        $('#input-language')
+            .val(Q_MAP[LANG_TAMIL]);
+
+
+        $('#input-category')
+            .val(
+                Q_MAP[item.lexicalCategory] ||
+                item.lexicalCategory
+            );
+
+
+        // IMPORTANT:
+        // Re-enable both buttons for every new word.
+
+        $('#submit-lexeme-btn')
+            .prop('disabled', false)
+            .text('Create Lexeme');
+
+
+        $('#skip-lexeme-btn')
+            .prop('disabled', false);
+
+
+        $('#status-msg')
+            .text('')
+            .css('color', '#00af89');
+
+
+        $('#audio-status-box')
+            .css({
+                background: '#f8f9fa',
+                borderColor: '#ccc',
+                color: '#555'
+            })
+            .html(
+                '🔊 Commons ஒலிக்கோப்பு: ' +
+                '<strong>உருவாக்கும்போது சரிபார்க்கப்படும்</strong>'
+            );
+
+
+        const statusBox =
+            $('#wiktionary-status-box');
+
+
+        if (item.inWiktionary) {
+
+            const wiktionaryUrl =
+                'https://ta.wiktionary.org/wiki/' +
+                encodeURIComponent(
+                    item.wiktionaryTitle ||
+                    item.lemma
+                );
+
+
+            statusBox.css({
+
+                background: '#e6f9ed',
+
+                borderColor: '#00af89',
+
+                color: '#006633'
+
+            }).html(
+
+                '📚 தமிழ் விக்சனரியில் இச்சொல் உள்ளது: ' +
+
+                '<a href="' +
+                wiktionaryUrl +
+                '" target="_blank" ' +
+                'style="color:#006633; text-decoration:underline;">' +
+
+                '<strong>' +
+                item.lemma +
+                '</strong>' +
+
+                '</a>' +
+
+                '<br>இலக்கண வகை: <strong>' +
+
+                (
+                    Q_MAP[item.lexicalCategory] ||
+                    item.lexicalCategory
+                ) +
+
+                '</strong>'
+            );
+
+        } else {
+
+            statusBox.css({
+
+                background: '#fffbe6',
+
+                borderColor: '#fc0',
+
+                color: '#000'
+
+            }).html(
+
+                '⚠️ தமிழ் விக்சனரியில் இச்சொல் இல்லை. ' +
+
+                'இயல்புநிலையாக <strong>' +
+
+                (
+                    Q_MAP[item.lexicalCategory] ||
+                    item.lexicalCategory
+                ) +
+
+                '</strong> என அமைந்தது.'
+            );
+        }
+    }
+
+
+    // ========================================================
+    // CREATE WIKIDATA LEXEME
+    // ========================================================
+
+    function createLexeme(
+        lemmaVal,
+        langVal,
+        catVal,
+        audioFileName
+    ) {
+
+        // ----------------------------------------------------
+        // Create the Lexeme.
+        //
+        // IMPORTANT:
+        // The first form is also created.
+        // ----------------------------------------------------
+
+        const lexemeData = {
+
+            type: 'lexeme',
+
+            lemmas: {
+
+                ta: {
+
+                    value: lemmaVal,
+
+                    language: 'ta'
+                }
+            },
+
+            lexicalCategory: catVal,
+
+            language: langVal,
+
+            forms: [
+
+                {
+
+                    add: '',
+
+                    representations: {
+
+                        ta: {
+
+                            language: 'ta',
+
+                            value: lemmaVal
+                        }
+                    },
+
+                    grammaticalFeatures: []
+                }
+            ]
+        };
+
+
+        return wikidataApi.post({
+
+            action: 'wbeditentity',
+
+            new: 'lexeme',
+
+            data:
+                JSON.stringify(lexemeData),
+
+            summary:
+                'Wikisource இலிருந்து உருவாக்கப்பட்டது | ' +
+                'பயனர்: ' +
+                currentUser,
+
+            token: csrfToken,
+
+            assert: 'user',
+
+            format: 'json'
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !data.success ||
+                !data.entity ||
+                !data.entity.id
+            ) {
+
+                throw new Error(
+                    data &&
+                    data.error &&
+                    data.error.info
+                        ? data.error.info
+                        : 'Lexeme உருவாக்க முடியவில்லை.'
+                );
+            }
+
+
+            const lexemeId =
+                data.entity.id;
+
+
+            // ------------------------------------------------
+            // If there is no audio, return immediately.
+            // ------------------------------------------------
+
+            if (!audioFileName) {
+
+                return {
+
+                    lexemeId: lexemeId,
+
+                    formId: null,
+
+                    audioFileName: null
+                };
+            }
+
+
+            // ------------------------------------------------
+            // Get the first Form ID.
+            // ------------------------------------------------
+
+            return getFirstFormId(
+                lexemeId
+            ).then(function (formId) {
+
+                if (!formId) {
+
+                    throw new Error(
+                        'Lexeme உருவாக்கப்பட்டது; ' +
+                        'ஆனால் Form ID பெற முடியவில்லை.'
+                    );
+                }
+
+
+                // ------------------------------------------------
+                // Add P443 to the Form.
+                // ------------------------------------------------
+
+                return addPronunciationToForm(
+                    formId,
+                    audioFileName
+                ).then(function () {
+
+                    return {
+
+                        lexemeId: lexemeId,
+
+                        formId: formId,
+
+                        audioFileName:
+                            audioFileName
+                    };
+                });
+            });
+        });
+    }
+
+
+    // ========================================================
+    // GET FIRST FORM ID
+    // ========================================================
+
+    function getFirstFormId(lexemeId) {
+
+        return wikidataApi.get({
+
+            action: 'wbgetentities',
+
+            ids: lexemeId,
+
+            props: 'forms',
+
+            formatversion: 2
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !data.entities
+            ) {
+
+                return null;
+            }
+
+
+            const entity =
+                data.entities[lexemeId];
+
+
+            if (
+                !entity ||
+                !entity.forms
+            ) {
+
+                return null;
+            }
+
+
+            // formatversion=2 normally returns an array
+            if (Array.isArray(entity.forms)) {
+
+                if (
+                    entity.forms.length &&
+                    entity.forms[0].id
+                ) {
+
+                    return entity.forms[0].id;
+                }
+
+                return null;
+            }
+
+
+            // Fallback for object-style response
+
+            const keys =
+                Object.keys(entity.forms);
+
+
+            if (keys.length) {
+
+                return keys[0];
+            }
+
+
+            return null;
+        });
+    }
+
+
+    // ========================================================
+    // ADD P443 PRONUNCIATION AUDIO TO FORM
+    // ========================================================
+
+    function addPronunciationToForm(
+        formId,
+        audioFileName
+    ) {
+
+        const claim =
+            buildPronunciationAudioClaim(
+                audioFileName
+            );
+
+
+        const formData = {
+
+            claims: [
+
+                claim
+            ]
+        };
+
+
+        return wikidataApi.post({
+
+            action: 'wbeditentity',
+
+            id: formId,
+
+            data:
+                JSON.stringify(formData),
+
+            summary:
+                'Commons pronunciation audio இணைக்கப்பட்டது | ' +
+                audioFileName,
+
+            token: csrfToken,
+
+            assert: 'user',
+
+            format: 'json'
+
+        }).then(function (data) {
+
+            if (
+                !data ||
+                !data.success
+            ) {
+
+                throw new Error(
+                    data &&
+                    data.error &&
+                    data.error.info
+                        ? data.error.info
+                        : 'P443 சேர்க்க முடியவில்லை.'
+                );
+            }
+
+
+            return true;
+        });
+    }
+
+
+    // ========================================================
+    // SUBMIT CURRENT LEXEME
+    // ========================================================
+
+    function submitCurrentLexeme() {
+
+        const lemmaVal =
+            $('#input-lemma')
+                .val()
+                .trim();
+
+
+        const rawLangVal =
+            $('#input-language')
+                .val()
+                .trim();
+
+
+        const rawCatVal =
+            $('#input-category')
+                .val()
+                .trim();
+
+
+        const langVal =
+            extractQID(rawLangVal);
+
+
+        const catVal =
+            extractQID(rawCatVal);
+
+
+        if (
+            !lemmaVal ||
+            !langVal ||
+            !catVal
+        ) {
+
+            alert(
+                'அனைத்துப் புலங்களையும் நிரப்பவும்.'
+            );
+
+            return;
+        }
+
+
+        // ----------------------------------------------------
+        // Disable buttons during operation
+        // ----------------------------------------------------
+
+        $('#submit-lexeme-btn')
+            .prop('disabled', true)
+            .text('உருவாக்கப்படுகிறது...');
+
+
+        $('#skip-lexeme-btn')
+            .prop('disabled', true);
+
+
+        $('#status-msg')
+            .text(
+                '🔎 Commons-ல் ஒலிக்கோப்பு தேடப்படுகிறது...'
+            )
+            .css('color', '#00af89');
+
+
+        const item =
+            filteredLexemesList[currentIndex];
+
+
+        // ----------------------------------------------------
+        // Find Commons audio first
+        // ----------------------------------------------------
+
+        findCommonsPronunciationAudio(
+
+            lemmaVal,
+
+            item
+                ? item.wiktionaryContent
+                : ''
+
+        ).then(function (audioFileName) {
+
+
+            if (audioFileName) {
+
+                $('#audio-status-box')
+                    .css({
+                        background: '#e6f9ed',
+                        borderColor: '#00af89',
+                        color: '#006633'
+                    })
+                    .html(
+
+                        '🔊 Commons ஒலிக்கோப்பு கண்டறியப்பட்டது: ' +
+
+                        '<strong>' +
+                        escapeHtml(audioFileName) +
+                        '</strong>'
+                    );
+
+
+                $('#status-msg')
+                    .text(
+                        '🔊 ஒலிக்கோப்பு கண்டறியப்பட்டது. ' +
+                        'Lexeme + Form உருவாக்கப்படுகிறது...'
+                    )
+                    .css('color', '#00af89');
+
+            } else {
+
+                $('#audio-status-box')
+                    .css({
+                        background: '#fffbe6',
+                        borderColor: '#fc0',
+                        color: '#665500'
+                    })
+                    .html(
+                        '🔇 Commons-ல் பொருத்தமான ' +
+                        'ஒலிக்கோப்பு கிடைக்கவில்லை. ' +
+                        'Lexeme + Form மட்டும் உருவாக்கப்படும்.'
+                    );
+
+
+                $('#status-msg')
+                    .text(
+                        'Lexeme + Form உருவாக்கப்படுகிறது...'
+                    )
+                    .css('color', '#00af89');
+            }
+
+
+            // ------------------------------------------------
+            // Create Lexeme
+            // ------------------------------------------------
+
+            return createLexeme(
+
+                lemmaVal,
+
+                langVal,
+
+                catVal,
+
+                audioFileName
+
+            );
+
+        }).then(function (result) {
+
+
+            if (!result) {
+                return;
+            }
+
+
+            let message =
+                'வெற்றி: ' +
+                lemmaVal +
+                ' (' +
+                result.lexemeId +
+                ') உருவாக்கப்பட்டது!';
+
+
+            if (
+                result.audioFileName &&
+                result.formId
+            ) {
+
+                message +=
+                    ' 🔊 P443: ' +
+                    result.audioFileName;
+            }
+
+
+            $('#status-msg')
+                .html(message)
+                .css('color', 'green');
+
+
+            // ------------------------------------------------
+            // Show clickable Wikidata link
+            // ------------------------------------------------
+
+            const lexemeUrl =
+                'https://www.wikidata.org/wiki/' +
+                result.lexemeId;
+
+
+            let linkHtml =
+                '<a href="' +
+                lexemeUrl +
+                '" target="_blank" ' +
+                'style="color:#36c;">' +
+                result.lexemeId +
+                '</a>';
+
+
+            if (
+                result.formId
+            ) {
+
+                const formUrl =
+                    'https://www.wikidata.org/wiki/' +
+                    result.formId;
+
+
+                linkHtml +=
+                    ' / <a href="' +
+                    formUrl +
+                    '" target="_blank" ' +
+                    'style="color:#36c;">' +
+                    result.formId +
+                    '</a>';
+            }
+
+
+            $('#status-msg')
+                .append(
+                    '<br>' +
+                    linkHtml
+                );
+
+
+            // ------------------------------------------------
+            // Next word
+            // ------------------------------------------------
+
+            setTimeout(function () {
+
+                nextWord();
+
+            }, 1200);
+
+
+        }).catch(function (error) {
+
+            console.error(error);
+
+
+            $('#status-msg')
+                .text(
+                    '❌ பிழை: ' +
+                    (
+                        error.message ||
+                        error
+                    )
+                )
+                .css('color', 'red');
+
+
+            // Re-enable buttons
+
+            $('#submit-lexeme-btn')
+                .prop('disabled', false)
+                .text('Create Lexeme');
+
+
+            $('#skip-lexeme-btn')
+                .prop('disabled', false);
+        });
+    }
+
+
+    // ========================================================
+    // ESCAPE HTML
+    // ========================================================
+
+    function escapeHtml(text) {
+
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+
+    // ========================================================
+    // NEXT WORD
+    // ========================================================
+
+    function nextWord() {
+
+        currentIndex++;
+
+
+        if (
+            currentIndex <
+            filteredLexemesList.length
+        ) {
+
+            loadCurrentWordToForm();
+
+            return;
+        }
+
+
+        alert(
+            'அனைத்துப் புதிய சொற்களும் ' +
+            'வெற்றிகரமாக உருவாக்கப்பட்டு முடிவடைந்தன!'
+        );
+
+
+        $('#lexeme-modal-overlay').remove();
+    }
+
+
+    // ========================================================
+    // INITIALIZE
+    // ========================================================
+
+    mw.loader.using(
+        'mediawiki.ForeignApi'
+    ).then(function () {
+
+        initializeApis();
+
+        $(document).ready(
+            addImportButton
+        );
+    });
+
+
+})();
