@@ -1,0 +1,1455 @@
+// ============================================================
+// WikiSource Universal Lexeme Creator
+// Works for any Wikisource language sub-domain
+// (ta, en, fr, hi, te, kn, ml, bn, sa, pa, gu, mr, or, as, si, ne, ...)
+// ============================================================
+
+(function () {
+    'use strict';
+
+    // ========================================================
+    // 1. மொழி உள்ளமைவு அட்டவணை (LANG_CONFIG)
+    //    புதிய மொழி சேர்க்க: கீழே ஒரு entry சேர்க்கவும்.
+    // ========================================================
+
+    const LANG_CONFIG = {
+        ta: {
+            qid: 'Q5885',
+            script: /[\u0B80-\u0BFF]/,
+            audioPrefix: 'Ta',
+            pos: {
+                Q1084: ['பெயர்ச்சொல்', 'noun'],
+                Q24905: ['வினைச்சொல்', 'verb'],
+                Q34698: ['பெயரடை', 'adjective'],
+                Q38005: ['வினையடை', 'adverb']
+            },
+            fileNamespaces: ['File', 'படிமம்'],
+            strings: {
+                button: 'அகராதிச் சொற்களை விக்கித்தரவில் இணை',
+                buttonBusy: 'விக்கித்தரவு சரிபார்க்கப்படுகிறது...',
+                loginRequired: 'இந்தப் பங்களிப்பு உங்கள் கணக்கில் சேர நீங்கள் முதலில் உள்நுழைய வேண்டும்.',
+                noWords: 'அகராதித் தலைப்புச் சொற்கள் எதுவும் கண்டறியப்படவில்லை.',
+                allExist: 'இப்பக்கத்தில் உள்ள அனைத்து அகராதிச் சொற்களும் ஏற்கனவே விக்கித்தரவில் உருவாக்கப்பட்டுவிட்டன!',
+                apiError: 'API தொடர்பில் பிழை ஏற்பட்டுள்ளது.',
+                wiktionaryLoading: '📖 விக்சனரித் தரவு ஏற்றப்படுகிறது...',
+                wiktionaryFound: '📚 விக்சனரியில் இச்சொல் உள்ளது',
+                wiktionaryNotFound: '⚠️ விக்சனரியில் இச்சொல் இல்லை. இயல்புநிலை வகை பயன்படுத்தப்பட்டது.',
+                grammar: 'இலக்கண வகை',
+                audioPending: '🔊 Commons ஒலிக்கோப்பு: <strong>உருவாக்கும்போது சரிபார்க்கப்படும்</strong>',
+                audioSearching: '🔎 Commons-ல் ஒலிக்கோப்பு தேடப்படுகிறது...',
+                audioFound: '🔊 Commons ஒலிக்கோப்பு கண்டறியப்பட்டது',
+                audioNotFound: '🔇 Commons-ல் பொருத்தமான ஒலிக்கோப்பு கிடைக்ககவில்லை. Lexeme + Form மட்டும் உருவாக்கப்படும்.',
+                creating: 'Lexeme + Form உருவாக்கப்படுகிறது...',
+                success: 'வெற்றி',
+                created: 'உருவாக்கப்பட்டது',
+                skip: 'தவிர் (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'உருவாக்கப்படுகிறது...',
+                fillAll: 'அனைத்துப் புலங்களையும் நிரப்பவும்.',
+                allDone: 'அனைத்துப் புதிய சொற்களும் வெற்றிகரமாக உருவாக்கப்பட்டு முடிவடைந்தன!',
+                notInWikidata: 'விக்கித்தரவில் இல்லாத சொற்கள்',
+                newLexeme: 'Create a new Lexeme',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme\'s language *',
+                catLabel: 'Lexical category *',
+                cc0Notice: 'By clicking "Create Lexeme", you agree to the terms of use, and you irrevocably agree to release your contribution under the Creative Commons CC0 License.',
+                errToken: 'விக்கித்தரவு CSRF token பெற முடியவில்லை.',
+                errCreate: 'Lexeme உருவாக்க முடியவில்லை.',
+                errNoForm: 'Lexeme உருவாக்கப்பட்டது; ஆனால் Form ID பெற முடியவில்லை.',
+                errP443: 'P443 சேர்க்க முடியவில்லை.'
+            }
+        },
+        en: {
+            qid: 'Q1860',
+            script: /[A-Za-z]/,
+            audioPrefix: 'En',
+            pos: {
+                Q1084: ['noun'],
+                Q24905: ['verb'],
+                Q34698: ['adjective'],
+                Q38005: ['adverb']
+            },
+            fileNamespaces: ['File'],
+            strings: {
+                button: 'Import Headwords to Wikidata',
+                buttonBusy: 'Checking Wikidata...',
+                loginRequired: 'Please log in to use this tool.',
+                noWords: 'No dictionary headwords detected.',
+                allExist: 'All headwords on this page already exist on Wikidata!',
+                apiError: 'API Error:',
+                wiktionaryLoading: '📖 Loading Wiktionary data...',
+                wiktionaryFound: '📚 Found on Wiktionary',
+                wiktionaryNotFound: '⚠️ Not found on Wiktionary. Defaulting category.',
+                grammar: 'Part of speech',
+                audioPending: '🔊 Commons audio: <strong>will be checked on creation</strong>',
+                audioSearching: '🔎 Searching audio on Commons...',
+                audioFound: '🔊 Commons audio found',
+                audioNotFound: '🔇 No matching audio found on Commons. Creating Lexeme + Form only.',
+                creating: 'Creating Lexeme + Form...',
+                success: 'Success',
+                created: 'created',
+                skip: 'Skip',
+                createLexeme: 'Create Lexeme',
+                creating2: 'Creating...',
+                fillAll: 'Please fill in all fields.',
+                allDone: 'All new headwords created successfully!',
+                notInWikidata: 'Headwords not in Wikidata',
+                newLexeme: 'Create a new Lexeme',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme\'s language *',
+                catLabel: 'Lexical category *',
+                cc0Notice: 'By clicking "Create Lexeme", you agree to the terms of use, and you irrevocably agree to release your contribution under the Creative Commons CC0 License.',
+                errToken: 'Failed to retrieve Wikidata CSRF token.',
+                errCreate: 'Lexeme creation failed.',
+                errNoForm: 'Lexeme created but Form ID could not be retrieved.',
+                errP443: 'Failed to add P443.'
+            }
+        },
+        hi: {
+            qid: 'Q1568',
+            script: /[\u0900-\u097F]/,
+            audioPrefix: 'Hi',
+            pos: {
+                Q1084: ['संज्ञा', 'noun'],
+                Q24905: ['क्रिया', 'verb'],
+                Q34698: ['विशेषण', 'adjective'],
+                Q38005: ['क्रिया विशेषण', 'adverb']
+            },
+            fileNamespaces: ['File', 'चित्र'],
+            strings: {
+                button: 'शब्दकोश शीर्षशब्द विकिडेटा में आयात करें',
+                buttonBusy: 'विकिडेटा जाँचा जा रहा है...',
+                loginRequired: 'कृपया इस उपकरण का उपयोग करने के लिए लॉग इन करें।',
+                noWords: 'कोई शब्दकोश शीर्षशब्द नहीं मिला।',
+                allExist: 'इस पृष्ठ के सभी शीर्षशब्द पहले से ही विकिडेटा में मौजूद हैं!',
+                apiError: 'API त्रुटि:',
+                wiktionaryLoading: '📖 विक्षनरी डेटा लोड हो रहा है...',
+                wiktionaryFound: '📚 विक्षनरी में मिला',
+                wiktionaryNotFound: '⚠️ विक्षनरी में नहीं मिला। डिफ़ॉल्ट श्रेणी।',
+                grammar: 'शब्दभेद',
+                audioPending: '🔊 कॉमन्स ऑडियो: <strong>निर्माण के समय जाँचा जाएगा</strong>',
+                audioSearching: '🔎 कॉमन्स पर ऑडियो खोजा जा रहा है...',
+                audioFound: '🔊 कॉमन्स ऑडियो मिला',
+                audioNotFound: '🔇 कॉमन्स पर कोई ऑडियो नहीं मिला। केवल Lexeme + Form बनाया जाएगा।',
+                creating: 'Lexeme + Form बनाया जा रहा है...',
+                success: 'सफल',
+                created: 'बनाया गया',
+                skip: 'छोड़ें (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'बनाया जा रहा है...',
+                fillAll: 'कृपया सभी फ़ील्ड भरें।',
+                allDone: 'सभी नए शीर्षशब्द सफलतापूर्वक बनाए गए!',
+                notInWikidata: 'विकिडेटा में नहीं मौजूद शीर्षशब्द',
+                newLexeme: 'नया Lexeme बनाएँ',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme की भाषा *',
+                catLabel: 'शब्दभेद *',
+                cc0Notice: '"Create Lexeme" पर क्लिक करके आप उपयोग की शर्तों से सहमत होते हैं और अपने योगदान को CC0 लाइसेंस के अंतर्गत जारी करते हैं।',
+                errToken: 'विकिडेटा CSRF टोकन प्राप्त नहीं हुआ।',
+                errCreate: 'Lexeme निर्माण विफल।',
+                errNoForm: 'Lexeme बना लेकिन Form ID नहीं मिली।',
+                errP443: 'P443 जोड़ने में विफल।'
+            }
+        },
+        te: {
+            qid: 'Q8097',
+            script: /[\u0C00-\u0C7F]/,
+            audioPrefix: 'Te',
+            pos: { Q1084: ['నామవాచకం', 'noun'], Q24905: ['క్రియ', 'verb'],
+                   Q34698: ['విశేషణం', 'adjective'], Q38005: ['క్రియా విశేషణం', 'adverb'] },
+            fileNamespaces: ['File', 'దస్త్రం'],
+            strings: {
+                button: 'వికీడేటాకు శీర్షపదాలను దిగుమతి చేయి',
+                buttonBusy: 'వికీడేటా తనిఖీ చేయబడుతోంది...',
+                loginRequired: 'దయచేసి లాగిన్ అవ్వండి.',
+                noWords: 'శీర్షపదాలు కనుగొనబడలేదు.',
+                allExist: 'అన్ని పదాలు ఇప్పటికే వికీడేటాలో ఉన్నాయి!',
+                apiError: 'API లోపం:',
+                wiktionaryLoading: '📖 విక్షనరీ డేటా లోడ్ అవుతోంది...',
+                wiktionaryFound: '📚 విక్షనరీలో కనుగొనబడింది',
+                wiktionaryNotFound: '⚠️ విక్షనరీలో లేదు. డిఫాల్ట్ వర్గం.',
+                grammar: 'పద విభాగం',
+                audioPending: '🔊 కామన్స్ ఆడియో: <strong>సృష్టి సమయంలో తనిఖీ చేయబడుతుంది</strong>',
+                audioSearching: '🔎 కామన్స్లో ఆడియో వెతుకుతోంది...',
+                audioFound: '🔊 కామన్స్ ఆడియో కనుగొనబడింది',
+                audioNotFound: '🔇 ఆడియో కనుగొనబడలేదు. Lexeme + Form మాత్రమే సృష్టించబడుతుంది.',
+                creating: 'Lexeme + Form సృష్టించబడుతోంది...',
+                success: 'విజయం',
+                created: 'సృష్టించబడింది',
+                skip: 'దాటవేయి (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'సృష్టించబడుతోంది...',
+                fillAll: 'అన్ని ఫీల్డ్లు నింపండి.',
+                allDone: 'అన్ని కొత్త పదాలు విజయవంతంగా సృష్టించబడ్డాయి!',
+                notInWikidata: 'వికీడేటాలో లేని పదాలు',
+                newLexeme: 'కొత్త Lexeme సృష్టించు',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme భాష *',
+                catLabel: 'పద విభాగం *',
+                cc0Notice: '"Create Lexeme" నొక్కడం ద్వారా మీరు CC0 లైసెన్స్కు అంగీకరిస్తున్నారు.',
+                errToken: 'CSRF టోకెన్ పొందలేకపోయింది.',
+                errCreate: 'Lexeme సృష్టి విఫలమైంది.',
+                errNoForm: 'Form ID పొందలేకపోయింది.',
+                errP443: 'P443 జోడించడం విఫలమైంది.'
+            }
+        },
+        kn: {
+            qid: 'Q33673',
+            script: /[\u0C80-\u0CFF]/,
+            audioPrefix: 'Kn',
+            pos: { Q1084: ['ನಾಮಪದ', 'noun'], Q24905: ['ಕ್ರಿಯಾಪದ', 'verb'],
+                   Q34698: ['ವಿಶೇಷಣ', 'adjective'], Q38005: ['ಕ್ರಿಯಾವಿಶೇಷಣ', 'adverb'] },
+            fileNamespaces: ['File', 'ಚಿತ್ರ'],
+            strings: {
+                button: 'ವಿಕಿಡೇಟಾಗೆ ಶಬ್ದಕೋಶದ ಶೀರ್ಷಿಕೆಗಳನ್ನು ಆಮದು ಮಾಡಿ',
+                buttonBusy: 'ವಿಕಿಡೇಟಾ ಪರಿಶೀಲಿಸಲಾಗುತ್ತಿದೆ...',
+                loginRequired: 'ದಯವಿಟ್ಟು ಲಾಗಿನ್ ಆಗಿ.',
+                noWords: 'ಯಾವುದೇ ಶೀರ್ಷಿಕೆಗಳು ಕಂಡುಬಂದಿಲ್ಲ.',
+                allExist: 'ಎಲ್ಲಾ ಪದಗಳು ಈಗಾಗಲೇ ವಿಕಿಡೇಟಾದಲ್ಲಿವೆ!',
+                apiError: 'API ದೋಷ:',
+                wiktionaryLoading: '📖 ವಿಕ್ಷನರಿ ಡೇಟಾ ಲೋಡ್ ಆಗುತ್ತಿದೆ...',
+                wiktionaryFound: '📚 ವಿಕ್ಷನರಿಯಲ್ಲಿ ಕಂಡುಬಂದಿದೆ',
+                wiktionaryNotFound: '⚠️ ವಿಕ್ಷನರಿಯಲ್ಲಿ ಇಲ್ಲ. ಡೀಫಾಲ್ಟ್ ವರ್ಗ.',
+                grammar: 'ಪದ ವರ್ಗ',
+                audioPending: '🔊 ಕಾಮನ್ಸ್ ಆಡಿಯೋ: <strong>ರಚನೆಯ ಸಮಯದಲ್ಲಿ ಪರಿಶೀಲಿಸಲಾಗುತ್ತದೆ</strong>',
+                audioSearching: '🔎 ಕಾಮನ್ಸ್ನಲ್ಲಿ ಆಡಿಯೋ ಹುಡುಕಲಾಗುತ್ತಿದೆ...',
+                audioFound: '🔊 ಕಾಮನ್ಸ್ ಆಡಿಯೋ ಕಂಡುಬಂದಿದೆ',
+                audioNotFound: '🔇 ಆಡಿಯೋ ಕಂಡುಬಂದಿಲ್ಲ. Lexeme + Form ಮಾತ್ರ ರಚಿಸಲಾಗುತ್ತದೆ.',
+                creating: 'Lexeme + Form ರಚಿಸಲಾಗುತ್ತಿದೆ...',
+                success: 'ಯಶಸ್ಸು',
+                created: 'ರಚಿಸಲಾಗಿದೆ',
+                skip: 'ಬಿಟ್ಟುಬಿಡಿ (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'ರಚಿಸಲಾಗುತ್ತಿದೆ...',
+                fillAll: 'ಎಲ್ಲಾ ಕ್ಷೇತ್ರಗಳನ್ನು ಭರ್ತಿ ಮಾಡಿ.',
+                allDone: 'ಎಲ್ಲಾ ಹೊಸ ಪದಗಳು ಯಶಸ್ವಿಯಾಗಿ ರಚಿಸಲ್ಪಟ್ಟವು!',
+                notInWikidata: 'ವಿಕಿಡೇಟಾದಲ್ಲಿ ಇಲ್ಲದ ಪದಗಳು',
+                newLexeme: 'ಹೊಸ Lexeme ರಚಿಸಿ',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ಭಾಷೆ *',
+                catLabel: 'ಪದ ವರ್ಗ *',
+                cc0Notice: '"Create Lexeme" ಒತ್ತುವ ಮೂಲಕ ನೀವು CC0 ಪರವಾನಗಿಗೆ ಒಪ್ಪುತ್ತೀರಿ.',
+                errToken: 'CSRF ಟೋಕನ್ ಪಡೆಯಲಾಗಲಿಲ್ಲ.',
+                errCreate: 'Lexeme ರಚನೆ ವಿಫಲವಾಯಿತು.',
+                errNoForm: 'Form ID ಪಡೆಯಲಾಗಲಿಲ್ಲ.',
+                errP443: 'P443 ಸೇರಿಸಲು ವಿಫಲವಾಯಿತು.'
+            }
+        },
+        ml: {
+            qid: 'Q36236',
+            script: /[\u0D00-\u0D7F]/,
+            audioPrefix: 'Ml',
+            pos: { Q1084: ['നാമം', 'noun'], Q24905: ['ക്രിയ', 'verb'],
+                   Q34698: ['നാമവിശേഷണം', 'adjective'], Q38005: ['ക്രിയാവിശേഷണം', 'adverb'] },
+            fileNamespaces: ['File', 'പ്രമാണം'],
+            strings: {
+                button: 'വിക്കിഡാറ്റയിലേക്ക് ശീർഷകങ്ങൾ ഇറക്കുമതി ചെയ്യുക',
+                buttonBusy: 'വിക്കിഡാറ്റ പരിശോധിക്കുന്നു...',
+                loginRequired: 'ദയവായി ലോഗിൻ ചെയ്യുക.',
+                noWords: 'ശീർഷകങ്ങൾ കണ്ടെത്തിയില്ല.',
+                allExist: 'എല്ലാ പദങ്ങളും ഇതിനകം വിക്കിഡാറ്റയിൽ ഉണ്ട്!',
+                apiError: 'API പിശക്:',
+                wiktionaryLoading: '📖 വിക്കിനിഘണ്ടു ഡാറ്റ ലോഡ് ചെയ്യുന്നു...',
+                wiktionaryFound: '📚 വിക്കിനിഘണ്ടുവിൽ കണ്ടെത്തി',
+                wiktionaryNotFound: '⚠️ വിക്കിനിഘണ്ടുവിൽ ഇല്ല. സ്ഥിരസ്ഥിതി വിഭാഗം.',
+                grammar: 'പദവർഗം',
+                audioPending: '🔊 കോമൺസ് ഓഡിയോ: <strong>സൃഷ്ടിക്കുമ്പോൾ പരിശോധിക്കും</strong>',
+                audioSearching: '🔎 കോമൺസിൽ ഓഡിയോ തിരയുന്നു...',
+                audioFound: '🔊 കോമൺസ് ഓഡിയോ കണ്ടെത്തി',
+                audioNotFound: '🔇 ഓഡിയോ കണ്ടെത്തിയില്ല. Lexeme + Form മാത്രം സൃഷ്ടിക്കും.',
+                creating: 'Lexeme + Form സൃഷ്ടിക്കുന്നു...',
+                success: 'വിജയം',
+                created: 'സൃഷ്ടിച്ചു',
+                skip: 'ഒഴിവാക്കുക (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'സൃഷ്ടിക്കുന്നു...',
+                fillAll: 'എല്ലാ ഫീൽഡുകളും പൂരിപ്പിക്കുക.',
+                allDone: 'എല്ലാ പുതിയ പദങ്ങളും വിജയകരമായി സൃഷ്ടിച്ചു!',
+                notInWikidata: 'വിക്കിഡാറ്റയിൽ ഇല്ലാത്ത പദങ്ങൾ',
+                newLexeme: 'പുതിയ Lexeme സൃഷ്ടിക്കുക',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ഭാഷ *',
+                catLabel: 'പദവർഗം *',
+                cc0Notice: '"Create Lexeme" ക്ലിക്ക് ചെയ്യുന്നതിലൂടെ നിങ്ങൾ CC0 ലൈസൻസ് അംഗീകരിക്കുന്നു.',
+                errToken: 'CSRF ടോക്കൺ ലഭിച്ചില്ല.',
+                errCreate: 'Lexeme സൃഷ്ടി പരാജയപ്പെട്ടു.',
+                errNoForm: 'Form ID ലഭിച്ചില്ല.',
+                errP443: 'P443 ചേർക്കാൻ കഴിഞ്ഞില്ല.'
+            }
+        },
+        bn: {
+            qid: 'Q9610',
+            script: /[\u0980-\u09FF]/,
+            audioPrefix: 'Bn',
+            pos: { Q1084: ['বিশেষ্য', 'noun'], Q24905: ['ক্রিয়া', 'verb'],
+                   Q34698: ['বিশেষণ', 'adjective'], Q38005: ['ক্রিয়াবিশেষণ', 'adverb'] },
+            fileNamespaces: ['File', 'চিত্র'],
+            strings: {
+                button: 'উইকিডেটায় শিরোনাম আমদানি করুন',
+                buttonBusy: 'উইকিডেটা পরীক্ষা করা হচ্ছে...',
+                loginRequired: 'অনুগ্রহ করে লগ ইন করুন।',
+                noWords: 'কোনো শিরোনাম পাওয়া যায়নি।',
+                allExist: 'সমস্ত শব্দ ইতিমধ্যেই উইকিডেটায় আছে!',
+                apiError: 'API ত্রুটি:',
+                wiktionaryLoading: '📖 উইকশনারি ডেটা লোড হচ্ছে...',
+                wiktionaryFound: '📚 উইকশনারিতে পাওয়া গেছে',
+                wiktionaryNotFound: '⚠️ উইকশনারিতে নেই। ডিফল্ট শ্রেণী।',
+                grammar: 'পদ প্রকরণ',
+                audioPending: '🔊 কমন্স অডিও: <strong>তৈরির সময় পরীক্ষা করা হবে</strong>',
+                audioSearching: '🔎 কমন্সে অডিও খোঁজা হচ্ছে...',
+                audioFound: '🔊 কমন্স অডিও পাওয়া গেছে',
+                audioNotFound: '🔇 অডিও পাওয়া যায়নি। শুধু Lexeme + Form তৈরি হবে।',
+                creating: 'Lexeme + Form তৈরি হচ্ছে...',
+                success: 'সফল',
+                created: 'তৈরি হয়েছে',
+                skip: 'এড়িয়ে যান (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'তৈরি হচ্ছে...',
+                fillAll: 'সমস্ত ক্ষেত্র পূরণ করুন।',
+                allDone: 'সমস্ত নতুন শব্দ সফলভাবে তৈরি হয়েছে!',
+                notInWikidata: 'উইকিডেটায় নেই এমন শব্দ',
+                newLexeme: 'নতুন Lexeme তৈরি করুন',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme এর ভাষা *',
+                catLabel: 'পদ প্রকরণ *',
+                cc0Notice: '"Create Lexeme" ক্লিক করে আপনি CC0 লাইসেন্সে সম্মত হচ্ছেন।',
+                errToken: 'CSRF টোকেন পাওয়া যায়নি।',
+                errCreate: 'Lexeme তৈরি ব্যর্থ।',
+                errNoForm: 'Form ID পাওয়া যায়নি।',
+                errP443: 'P443 যোগ করা যায়নি।'
+            }
+        },
+        sa: {
+            qid: 'Q11059',
+            script: /[\u0900-\u097F]/,
+            audioPrefix: 'Sa',
+            pos: { Q1084: ['नाम', 'noun'], Q24905: ['क्रिया', 'verb'],
+                   Q34698: ['विशेषण', 'adjective'], Q38005: ['क्रियाविशेषण', 'adverb'] },
+            fileNamespaces: ['File', 'चित्रम्'],
+            strings: {
+                button: 'विकिडेटायां शब्दान् आयातयतु',
+                buttonBusy: 'विकिडेटा परीक्ष्यते...',
+                loginRequired: 'कृपया प्रविशतु।',
+                noWords: 'शब्दाः न प्राप्ताः।',
+                allExist: 'सर्वे शब्दाः विकिडेटायाम् सन्ति!',
+                apiError: 'API दोषः:',
+                wiktionaryLoading: '📖 विकिशब्दकोशः आरोप्यते...',
+                wiktionaryFound: '📚 विकिशब्दकोशे प्राप्तम्',
+                wiktionaryNotFound: '⚠️ विकिशब्दकोशे नास्ति। पूर्वनिर्धारिता श्रेणी।',
+                grammar: 'पदभेदः',
+                audioPending: '🔊 कॉमन्स् ध्वनिः: <strong>निर्माणसमये परीक्ष्यते</strong>',
+                audioSearching: '🔎 कॉमन्स् ध्वनिः अन्विष्यते...',
+                audioFound: '🔊 कॉमन्स् ध्वनिः प्राप्ता',
+                audioNotFound: '🔇 ध्वनिः न प्राप्ता। केवलं Lexeme + Form निर्मीयते।',
+                creating: 'Lexeme + Form निर्मीयते...',
+                success: 'सफलम्',
+                created: 'निर्मितम्',
+                skip: 'त्यजतु (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'निर्मीयते...',
+                fillAll: 'सर्वे क्षेत्राः पूर्यन्ताम्।',
+                allDone: 'सर्वे नवशब्दाः सफलतया निर्मिताः!',
+                notInWikidata: 'विकिडेटायां न विद्यमानाः शब्दाः',
+                newLexeme: 'नवीनं Lexeme निर्मातु',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme भाषा *',
+                catLabel: 'पदभेदः *',
+                cc0Notice: '"Create Lexeme" नोदनेन CC0 अनुज्ञापत्रं स्वीक्रियते।',
+                errToken: 'CSRF टोकन् न प्राप्तम्।',
+                errCreate: 'Lexeme निर्माणं विफलम्।',
+                errNoForm: 'Form ID न प्राप्ता।',
+                errP443: 'P443 योजनं विफलम्।'
+            }
+        },
+        pa: {
+            qid: 'Q58635',
+            script: /[\u0A00-\u0A7F]/,
+            audioPrefix: 'Pa',
+            pos: { Q1084: ['ਨਾਂਵ', 'noun'], Q24905: ['ਕਿਰਿਆ', 'verb'],
+                   Q34698: ['ਵਿਸ਼ੇਸ਼ਣ', 'adjective'], Q38005: ['ਕਿਰਿਆ ਵਿਸ਼ੇਸ਼ਣ', 'adverb'] },
+            fileNamespaces: ['File', 'ਤਸਵੀਰ'],
+            strings: {
+                button: 'ਵਿਕੀਡਾਟਾ ਵਿੱਚ ਸਿਰਲੇਖ ਆਯਾਤ ਕਰੋ',
+                buttonBusy: 'ਵਿਕੀਡਾਟਾ ਦੀ ਜਾਂਚ ਹੋ ਰਹੀ ਹੈ...',
+                loginRequired: 'ਕਿਰਪਾ ਕਰਕੇ ਲੌਗਇਨ ਕਰੋ।',
+                noWords: 'ਕੋਈ ਸਿਰਲੇਖ ਨਹੀਂ ਮਿਲਿਆ।',
+                allExist: 'ਸਾਰੇ ਸ਼ਬਦ ਪਹਿਲਾਂ ਹੀ ਵਿਕੀਡਾਟਾ ਵਿੱਚ ਮੌਜੂਦ ਹਨ!',
+                apiError: 'API ਗੜਬੜ:',
+                wiktionaryLoading: '📖 ਵਿਕਸ਼ਨਰੀ ਡਾਟਾ ਲੋਡ ਹੋ ਰਿਹਾ ਹੈ...',
+                wiktionaryFound: '📚 ਵਿਕਸ਼ਨਰੀ ਵਿੱਚ ਮਿਲਿਆ',
+                wiktionaryNotFound: '⚠️ ਵਿਕਸ਼ਨਰੀ ਵਿੱਚ ਨਹੀਂ। ਡਿਫ਼ਾਲਟ ਸ਼੍ਰੇਣੀ।',
+                grammar: 'ਸ਼ਬਦ ਭੇਦ',
+                audioPending: '🔊 ਕਾਮਨਜ਼ ਆਡੀਓ: <strong>ਬਣਾਉਣ ਸਮੇਂ ਜਾਂਚਿਆ ਜਾਵੇਗਾ</strong>',
+                audioSearching: '🔎 ਕਾਮਨਜ਼ ਤੇ ਆਡੀਓ ਲੱਭ ਰਿਹਾ ਹੈ...',
+                audioFound: '🔊 ਕਾਮਨਜ਼ ਆਡੀਓ ਮਿਲਿਆ',
+                audioNotFound: '🔇 ਆਡੀਓ ਨਹੀਂ ਮਿਲਿਆ। ਸਿਰਫ਼ Lexeme + Form ਬਣਾਇਆ ਜਾਵੇਗਾ।',
+                creating: 'Lexeme + Form ਬਣਾਇਆ ਜਾ ਰਿਹਾ ਹੈ...',
+                success: 'ਸਫਲ',
+                created: 'ਬਣਾਇਆ ਗਿਆ',
+                skip: 'ਛੱਡੋ (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'ਬਣਾਇਆ ਜਾ ਰਿਹਾ ਹੈ...',
+                fillAll: 'ਕਿਰਪਾ ਕਰਕੇ ਸਾਰੇ ਖੇਤਰ ਭਰੋ।',
+                allDone: 'ਸਾਰੇ ਨਵੇਂ ਸ਼ਬਦ ਸਫਲਤਾਪੂਰਵਕ ਬਣਾਏ ਗਏ!',
+                notInWikidata: 'ਵਿਕੀਡਾਟਾ ਵਿੱਚ ਨਾ ਮੌਜੂਦ ਸ਼ਬਦ',
+                newLexeme: 'ਨਵਾਂ Lexeme ਬਣਾਓ',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ਦੀ ਭਾਸ਼ਾ *',
+                catLabel: 'ਸ਼ਬਦ ਭੇਦ *',
+                cc0Notice: '"Create Lexeme" ਦਬਾ ਕੇ ਤੁਸੀਂ CC0 ਲਾਇਸੰਸ ਨੂੰ ਸਵੀਕਾਰ ਕਰਦੇ ਹੋ।',
+                errToken: 'CSRF ਟੋਕਨ ਨਹੀਂ ਮਿਲਿਆ।',
+                errCreate: 'Lexeme ਨਿਰਮਾਣ ਫੇਲ੍ਹ।',
+                errNoForm: 'Form ID ਨਹੀਂ ਮਿਲੀ।',
+                errP443: 'P443 ਜੋੜਨਾ ਫੇਲ੍ਹ।'
+            }
+        },
+        gu: {
+            qid: 'Q5137',
+            script: /[\u0A80-\u0AFF]/,
+            audioPrefix: 'Gu',
+            pos: { Q1084: ['સંજ્ઞા', 'noun'], Q24905: ['ક્રિયાપદ', 'verb'],
+                   Q34698: ['વિશેષણ', 'adjective'], Q38005: ['ક્રિયાવિશેષણ', 'adverb'] },
+            fileNamespaces: ['File', 'ચિત્ર'],
+            strings: {
+                button: 'વિકિડેટામાં શબ્દો આયાત કરો',
+                buttonBusy: 'વિકિડેટા ચકાસાઈ રહ્યું છે...',
+                loginRequired: 'કૃપા કરીને લોગિન કરો.',
+                noWords: 'કોઈ શબ્દ મળ્યો નથી.',
+                allExist: 'બધા શબ્દો પહેલેથી વિકિડેટામાં છે!',
+                apiError: 'API ભૂલ:',
+                wiktionaryLoading: '📖 વિક્ષનરી ડેટા લોડ થઈ રહ્યો છે...',
+                wiktionaryFound: '📚 વિક્ષનરીમાં મળ્યું',
+                wiktionaryNotFound: '⚠️ વિક્ષનરીમાં નથી. ડિફોલ્ટ શ્રેણી.',
+                grammar: 'શબ્દભેદ',
+                audioPending: '🔊 કોમન્સ ઓડિયો: <strong>બનાવતી વખતે ચકાસાશે</strong>',
+                audioSearching: '🔎 કોમન્સ પર ઓડિયો શોધાઈ રહ્યો છે...',
+                audioFound: '🔊 કોમન્સ ઓડિયો મળ્યો',
+                audioNotFound: '🔇 ઓડિયો મળ્યો નથી. ફક્ત Lexeme + Form બનાવાશે.',
+                creating: 'Lexeme + Form બનાવાઈ રહ્યું છે...',
+                success: 'સફળ',
+                created: 'બનાવાયું',
+                skip: 'છોડો (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'બનાવાઈ રહ્યું છે...',
+                fillAll: 'બધા ક્ષેત્રો ભરો.',
+                allDone: 'બધા નવા શબ્દો સફળતાપૂર્વક બન્યા!',
+                notInWikidata: 'વિકિડેટામાં ન હોય તેવા શબ્દો',
+                newLexeme: 'નવું Lexeme બનાવો',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ની ભાષા *',
+                catLabel: 'શબ્દભેદ *',
+                cc0Notice: '"Create Lexeme" દબાવીને તમે CC0 લાઇસન્સ સ્વીકારો છો.',
+                errToken: 'CSRF ટોકન મળ્યો નથી.',
+                errCreate: 'Lexeme નિર્માણ નિષ્ફળ.',
+                errNoForm: 'Form ID મળી નથી.',
+                errP443: 'P443 ઉમેરવામાં નિષ્ફળ.'
+            }
+        },
+        mr: {
+            qid: 'Q1571',
+            script: /[\u0900-\u097F]/,
+            audioPrefix: 'Mr',
+            pos: { Q1084: ['नाम', 'noun'], Q24905: ['क्रियापद', 'verb'],
+                   Q34698: ['विशेषण', 'adjective'], Q38005: ['क्रियाविशेषण', 'adverb'] },
+            fileNamespaces: ['File', 'चित्र'],
+            strings: {
+                button: 'विकिडेटामध्ये शब्द आयात करा',
+                buttonBusy: 'विकिडेटा तपासत आहे...',
+                loginRequired: 'कृपया लॉगिन करा.',
+                noWords: 'कोणतेही शब्द सापडले नाहीत.',
+                allExist: 'सर्व शब्द आधीच विकिडेटामध्ये आहेत!',
+                apiError: 'API त्रुटी:',
+                wiktionaryLoading: '📖 विक्शनरी डेटा लोड होत आहे...',
+                wiktionaryFound: '📚 विक्शनरीमध्ये सापडले',
+                wiktionaryNotFound: '⚠️ विक्शनरीमध्ये नाही. डीफॉल्ट श्रेणी.',
+                grammar: 'शब्दप्रकार',
+                audioPending: '🔊 कॉमन्स ऑडिओ: <strong>तयार करताना तपासला जाईल</strong>',
+                audioSearching: '🔎 कॉमन्सवर ऑडिओ शोधत आहे...',
+                audioFound: '🔊 कॉमन्स ऑडिओ सापडला',
+                audioNotFound: '🔇 ऑडिओ सापडला नाही. फक्त Lexeme + Form तयार होईल.',
+                creating: 'Lexeme + Form तयार होत आहे...',
+                success: 'यशस्वी',
+                created: 'तयार झाले',
+                skip: 'वगळा (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'तयार होत आहे...',
+                fillAll: 'सर्व फील्ड भरा.',
+                allDone: 'सर्व नवीन शब्द यशस्वीरित्या तयार झाले!',
+                notInWikidata: 'विकिडेटामध्ये नसलेले शब्द',
+                newLexeme: 'नवीन Lexeme तयार करा',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ची भाषा *',
+                catLabel: 'शब्दप्रकार *',
+                cc0Notice: '"Create Lexeme" क्लिक करून तुम्ही CC0 परवाना स्वीकारता.',
+                errToken: 'CSRF टोकन मिळाले नाही.',
+                errCreate: 'Lexeme तयार करणे अयशस्वी.',
+                errNoForm: 'Form ID मिळाली नाही.',
+                errP443: 'P443 जोडणे अयशस्वी.'
+            }
+        },
+        or: {
+            qid: 'Q33823',
+            script: /[\u0B00-\u0B7F]/,
+            audioPrefix: 'Or',
+            pos: { Q1084: ['ବିଶେଷ୍ୟ', 'noun'], Q24905: ['କ୍ରିୟା', 'verb'],
+                   Q34698: ['ବିଶେଷଣ', 'adjective'], Q38005: ['କ୍ରିୟା ବିଶେଷଣ', 'adverb'] },
+            fileNamespaces: ['File', 'ଫାଇଲ'],
+            strings: {
+                button: 'ଉଇକିଡାଟାରେ ଶବ୍ଦ ଆମଦାନୀ କରନ୍ତୁ',
+                buttonBusy: 'ଉଇକିଡାଟା ଯାଞ୍ଚ କରାଯାଉଛି...',
+                loginRequired: 'ଦୟାକରି ଲଗଇନ କରନ୍ତୁ।',
+                noWords: 'କୌଣସି ଶବ୍ଦ ମିଳିଲା ନାହିଁ।',
+                allExist: 'ସମସ୍ତ ଶବ୍ଦ ପୂର୍ବରୁ ଉଇକିଡାଟାରେ ଅଛି!',
+                apiError: 'API ତ୍ରୁଟି:',
+                wiktionaryLoading: '📖 ଉଇକିଅଭିଧାନ ଡାଟା ଲୋଡ ହେଉଛି...',
+                wiktionaryFound: '📚 ଉଇକିଅଭିଧାନରେ ମିଳିଲା',
+                wiktionaryNotFound: '⚠️ ଉଇକିଅଭିଧାନରେ ନାହିଁ। ଡିଫଲ୍ଟ ବର୍ଗ।',
+                grammar: 'ପଦ ପ୍ରକାର',
+                audioPending: '🔊 କମନ୍ସ ଅଡିଓ: <strong>ତିଆରି ସମୟରେ ଯାଞ୍ଚ ହେବ</strong>',
+                audioSearching: '🔎 କମନ୍ସରେ ଅଡିଓ ଖୋଜାଯାଉଛି...',
+                audioFound: '🔊 କମନ୍ସ ଅଡିଓ ମିଳିଲା',
+                audioNotFound: '🔇 ଅଡିଓ ମିଳିଲା ନାହିଁ। କେବଳ Lexeme + Form ତିଆରି ହେବ।',
+                creating: 'Lexeme + Form ତିଆରି ହେଉଛି...',
+                success: 'ସଫଳ',
+                created: 'ତିଆରି ହେଲା',
+                skip: 'ଛାଡ଼ନ୍ତୁ (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'ତିଆରି ହେଉଛି...',
+                fillAll: 'ସମସ୍ତ କ୍ଷେତ୍ର ପୂରଣ କରନ୍ତୁ।',
+                allDone: 'ସମସ୍ତ ନୂତନ ଶବ୍ଦ ସଫଳତାର ସହ ତିଆରି ହେଲା!',
+                notInWikidata: 'ଉଇକିଡାଟାରେ ନଥିବା ଶବ୍ଦ',
+                newLexeme: 'ନୂଆ Lexeme ତିଆରି କରନ୍ତୁ',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ର ଭାଷା *',
+                catLabel: 'ପଦ ପ୍ରକାର *',
+                cc0Notice: '"Create Lexeme" କ୍ଲିକ କରି ଆପଣ CC0 ଲାଇସେନ୍ସ ସ୍ୱୀକାର କରନ୍ତି।',
+                errToken: 'CSRF ଟୋକେନ ମିଳିଲା ନାହିଁ।',
+                errCreate: 'Lexeme ନିର୍ମାଣ ବିଫଳ।',
+                errNoForm: 'Form ID ମିଳିଲା ନାହିଁ।',
+                errP443: 'P443 ଯୋଡ଼ିବା ବିଫଳ।'
+            }
+        },
+        as: {
+            qid: 'Q29401',
+            script: /[\u0980-\u09FF]/,
+            audioPrefix: 'As',
+            pos: { Q1084: ['বিশেষ্য', 'noun'], Q24905: ['ক্ৰিয়া', 'verb'],
+                   Q34698: ['বিশেষণ', 'adjective'], Q38005: ['ক্ৰিয়া বিশেষণ', 'adverb'] },
+            fileNamespaces: ['File', 'চিত্ৰ'],
+            strings: {
+                button: 'উইকিডেটাত শব্দ আমদানি কৰক',
+                buttonBusy: 'উইকিডেটা পৰীক্ষা কৰা হৈছে...',
+                loginRequired: 'অনুগ্ৰহ কৰি লগ ইন কৰক।',
+                noWords: 'কোনো শব্দ পোৱা নগ\'ল।',
+                allExist: 'সকলো শব্দ ইতিমধ্যে উইকিডেটাত আছে!',
+                apiError: 'API ত্ৰুটি:',
+                wiktionaryLoading: '📖 ৱিক্সনেৰী ডেটা লোড হৈ আছে...',
+                wiktionaryFound: '📚 ৱিক্সনেৰীত পোৱা গ\'ল',
+                wiktionaryNotFound: '⚠️ ৱিক্সনেৰীত নাই। ডিফল্ট শ্ৰেণী।',
+                grammar: 'শব্দ প্ৰকাৰ',
+                audioPending: '🔊 কমনছ অডিঅ\': <strong>সৃষ্টিৰ সময়ত পৰীক্ষা কৰা হ\'ব</strong>',
+                audioSearching: '🔎 কমনছত অডিঅ\' বিচৰা হৈছে...',
+                audioFound: '🔊 কমনছ অডিঅ\' পোৱা গ\'ল',
+                audioNotFound: '🔇 অডিঅ\' পোৱা নগ\'ল। কেৱল Lexeme + Form সৃষ্টি হ\'ব।',
+                creating: 'Lexeme + Form সৃষ্টি হৈ আছে...',
+                success: 'সফল',
+                created: 'সৃষ্টি হ\'ল',
+                skip: 'এৰি দিয়ক (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'সৃষ্টি হৈ আছে...',
+                fillAll: 'সকলো ক্ষেত্ৰ পূৰণ কৰক।',
+                allDone: 'সকলো নতুন শব্দ সফলভাৱে সৃষ্টি হ\'ল!',
+                notInWikidata: 'উইকিডেটাত নথকা শব্দ',
+                newLexeme: 'নতুন Lexeme সৃষ্টি কৰক',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme ৰ ভাষা *',
+                catLabel: 'শব্দ প্ৰকাৰ *',
+                cc0Notice: '"Create Lexeme" ক্লিক কৰি আপুনি CC0 অনুজ্ঞাপত্ৰ স্বীকাৰ কৰে।',
+                errToken: 'CSRF টোকেন পোৱা নগ\'ল।',
+                errCreate: 'Lexeme সৃষ্টি বিফল।',
+                errNoForm: 'Form ID পোৱা নগ\'ল।',
+                errP443: 'P443 যোগ কৰিব বিফল।'
+            }
+        },
+        si: {
+            qid: 'Q13267',
+            script: /[\u0D80-\u0DFF]/,
+            audioPrefix: 'Si',
+            pos: { Q1084: ['නාම පදය', 'noun'], Q24905: ['ක්‍රියා පදය', 'verb'],
+                   Q34698: ['විශේෂණය', 'adjective'], Q38005: ['ක්‍රියා විශේෂණය', 'adverb'] },
+            fileNamespaces: ['File', 'ගොනුව'],
+            strings: {
+                button: 'විකිදත්ත වෙත ශීර්ෂ පද ආනයනය කරන්න',
+                buttonBusy: 'විකිදත්ත පරීක්ෂා කරමින්...',
+                loginRequired: 'කරුණාකර පිවිසෙන්න.',
+                noWords: 'ශීර්ෂ පද හමු නොවිණි.',
+                allExist: 'සියලුම පද දැනටමත් විකිදත්තෙහි ඇත!',
+                apiError: 'API දෝෂය:',
+                wiktionaryLoading: '📖 වික්ෂනරි දත්ත පූරණය වෙමින්...',
+                wiktionaryFound: '📚 වික්ෂනරියේ හමු විය',
+                wiktionaryNotFound: '⚠️ වික්ෂනරියේ නැත. පෙරනිමි ප්‍රවර්ගය.',
+                grammar: 'වචන වර්ගය',
+                audioPending: '🔊 කොමන්ස් ශ්‍රව්‍ය: <strong>සෑදීමේදී පරීක්ෂා කෙරේ</strong>',
+                audioSearching: '🔎 කොමන්ස්හි ශ්‍රව්‍ය සොයමින්...',
+                audioFound: '🔊 කොමන්ස් ශ්‍රව්‍ය හමු විය',
+                audioNotFound: '🔇 ශ්‍රව්‍ය හමු නොවිණි. Lexeme + Form පමණක් සාදනු ලැබේ.',
+                creating: 'Lexeme + Form සාදමින්...',
+                success: 'සාර්ථකයි',
+                created: 'සාදන ලදී',
+                skip: 'මඟ හරින්න (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'සාදමින්...',
+                fillAll: 'සියලු ක්ෂේත්‍ර පුරවන්න.',
+                allDone: 'සියලු නව පද සාර්ථකව සාදන ලදී!',
+                notInWikidata: 'විකිදත්තෙහි නොමැති පද',
+                newLexeme: 'නව Lexeme සාදන්න',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme හි භාෂාව *',
+                catLabel: 'වචන වර්ගය *',
+                cc0Notice: '"Create Lexeme" ක්ලික් කිරීමෙන් ඔබ CC0 බලපත්‍රය පිළිගනී.',
+                errToken: 'CSRF ටෝකනය ලබා ගැනීමට නොහැකි විය.',
+                errCreate: 'Lexeme නිර්මාණය අසාර්ථකයි.',
+                errNoForm: 'Form ID ලබා ගැනීමට නොහැකි විය.',
+                errP443: 'P443 එක් කිරීම අසාර්ථකයි.'
+            }
+        },
+        ne: {
+            qid: 'Q1210',
+            script: /[\u0900-\u097F]/,
+            audioPrefix: 'Ne',
+            pos: { Q1084: ['नाम', 'noun'], Q24905: ['क्रिया', 'verb'],
+                   Q34698: ['विशेषण', 'adjective'], Q38005: ['क्रियाविशेषण', 'adverb'] },
+            fileNamespaces: ['File', 'चित्र'],
+            strings: {
+                button: 'विकिडाटामा शब्द आयात गर्नुहोस्',
+                buttonBusy: 'विकिडाटा जाँच गरिँदै...',
+                loginRequired: 'कृपया लग इन गर्नुहोस्।',
+                noWords: 'कुनै शब्द फेला परेन।',
+                allExist: 'सबै शब्द पहिले नै विकिडाटामा छन्!',
+                apiError: 'API त्रुटि:',
+                wiktionaryLoading: '📖 विक्सनरी डाटा लोड हुँदै...',
+                wiktionaryFound: '📚 विक्सनरीमा फेला पर्यो',
+                wiktionaryNotFound: '⚠️ विक्सनरीमा छैन। पूर्वनिर्धारित श्रेणी।',
+                grammar: 'शब्द प्रकार',
+                audioPending: '🔊 कमन्स अडियो: <strong>सिर्जना गर्दा जाँचिनेछ</strong>',
+                audioSearching: '🔎 कमन्समा अडियो खोजिँदै...',
+                audioFound: '🔊 कमन्स अडियो फेला पर्यो',
+                audioNotFound: '🔇 अडियो फेला परेन। केवल Lexeme + Form सिर्जना गरिनेछ।',
+                creating: 'Lexeme + Form सिर्जना गरिँदै...',
+                success: 'सफल',
+                created: 'सिर्जना गरियो',
+                skip: 'छोड्नुहोस् (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'सिर्जना गरिँदै...',
+                fillAll: 'सबै फाँट भर्नुहोस्।',
+                allDone: 'सबै नयाँ शब्द सफलतापूर्वक सिर्जना गरिए!',
+                notInWikidata: 'विकिडाटामा नभएका शब्द',
+                newLexeme: 'नयाँ Lexeme सिर्जना गर्नुहोस्',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme को भाषा *',
+                catLabel: 'शब्द प्रकार *',
+                cc0Notice: '"Create Lexeme" क्लिक गरेर तपाईं CC0 इजाजतपत्र स्वीकार गर्नुहुन्छ।',
+                errToken: 'CSRF टोकन प्राप्त भएन।',
+                errCreate: 'Lexeme सिर्जना असफल।',
+                errNoForm: 'Form ID प्राप्त भएन।',
+                errP443: 'P443 थप्न असफल।'
+            }
+        }
+    };
+
+    // ========================================================
+    // 2. இயங்கும் சூழல் (runtime config)
+    // ========================================================
+
+    const SITE_LANG = (mw.config.get('wgContentLanguage') || 'en').toLowerCase();
+    const CONFIG = LANG_CONFIG[SITE_LANG];
+    const T = CONFIG ? CONFIG.strings : LANG_CONFIG.en.strings;
+    const CURRENT_LANG_QID = CONFIG ? CONFIG.qid : 'Q1860';
+    const CURRENT_LANG_NUMERIC = parseInt(CURRENT_LANG_QID.replace(/^Q/, ''), 10);
+    const SCRIPT_RE = CONFIG ? CONFIG.script : /[A-Za-z]/;
+    const AUDIO_PREFIX = CONFIG ? CONFIG.audioPrefix : (SITE_LANG.charAt(0).toUpperCase() + SITE_LANG.slice(1));
+    const FILE_NAMESPACES = CONFIG ? CONFIG.fileNamespaces : ['File'];
+
+    // Wikidata properties
+    const P443_PRONUNCIATION_AUDIO = 'P443';
+    const P407_LANGUAGE = 'P407';
+
+    const AUDIO_EXTENSIONS = ['ogg', 'oga', 'opus', 'wav', 'flac', 'mp3'];
+
+    // ========================================================
+    // 3. நிலை மாறிகள்
+    // ========================================================
+
+    let rawHeadwordsList = [];
+    let filteredLexemesList = [];
+    let currentIndex = 0;
+    let currentUser = '';
+    let skippedCount = 0;
+
+    let wikidataApi = null;
+    let wiktionaryApi = null;
+    let commonsApi = null;
+    let csrfToken = '';
+
+    // ========================================================
+    // 4. API துவக்கம்
+    // ========================================================
+
+    function initializeApis() {
+        wikidataApi = new mw.ForeignApi('https://www.wikidata.org/w/api.php');
+        wiktionaryApi = new mw.ForeignApi('https://' + SITE_LANG + '.wiktionary.org/w/api.php');
+        commonsApi = new mw.ForeignApi('https://commons.wikimedia.org/w/api.php');
+    }
+
+    // ========================================================
+    // 5. உதவி சார்புகள்
+    // ========================================================
+
+    function normalizeWord(text) {
+        if (!text) return '';
+        return String(text)
+            .normalize('NFC')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function containsScript(text) {
+        return SCRIPT_RE.test(text || '');
+    }
+
+    function extractQID(textVal) {
+        if (!textVal) return '';
+        const match = String(textVal).match(/(Q\d+)/i);
+        return match ? match[1].toUpperCase() : String(textVal).trim();
+    }
+
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    // ========================================================
+    // 6. தலைப்புச்சொல் சேர்க்கை
+    // ========================================================
+
+    function addHeadword(word) {
+        word = normalizeWord(word);
+        if (!word || !containsScript(word)) return;
+        if (word.length < 1) return;
+
+        const exists = rawHeadwordsList.some(function (item) {
+            return normalizeWord(item.lemma) === word;
+        });
+
+        if (!exists) {
+            rawHeadwordsList.push({
+                lemma: word,
+                language: CURRENT_LANG_QID,
+                lexicalCategory: 'Q1084',
+                inWiktionary: false,
+                wiktionaryContent: ''
+            });
+        }
+    }
+
+    // ========================================================
+    // 7. உரை பிரித்தெடுத்தல்
+    // ========================================================
+
+    function extractWordsFromFirstField(text) {
+        if (!text) return [];
+        text = String(text)
+            .replace(/\u00A0/g, ' ')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .normalize('NFC');
+
+        const words = [];
+        const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+
+        lines.forEach(function (line) {
+            if (line.includes('=')) {
+                line = line.split('=')[0].trim();
+            }
+            const hyphenMatch = line.match(/^(.+?)\s+-\s+/);
+            if (hyphenMatch) {
+                line = hyphenMatch[1].trim();
+            }
+            line = normalizeWord(line);
+            if (!line) return;
+
+            // மொழி எழுத்தில் தொடங்கும் சொல் மட்டும் எடு
+            const m = line.match(new RegExp('^(' + SCRIPT_RE.source + '[\\s\\S]*?)(?:[\\s,;:|]|$)'));
+            if (m) {
+                let word = m[1].trim().replace(/[.,:;|]+$/g, '').trim();
+                if (word && containsScript(word)) words.push(word);
+                return;
+            }
+            if (containsScript(line)) words.push(line);
+        });
+        return words;
+    }
+
+    function extractHeadwordsFromTables(contentArea) {
+        const result = [];
+        contentArea.find('table').each(function () {
+            $(this).find('tr').each(function () {
+                const firstCell = $(this).find('th, td').first();
+                if (firstCell.length) {
+                    extractWordsFromFirstField(firstCell.text()).forEach(w => result.push(w));
+                }
+            });
+        });
+        return result;
+    }
+
+    function extractHeadwordsFromNormalText(contentArea) {
+        const result = [];
+        const clone = contentArea.clone();
+        clone.find('table, script, style, noscript, .printfooter, .mw-editsection, .prp-page-header, .prp-page-footer').remove();
+        const lines = clone.text().split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+
+        lines.forEach(function (line) {
+            if (!containsScript(line)) return;
+
+            if (line.includes('=')) {
+                const wordPart = line.split('=')[0].trim();
+                extractWordsFromFirstField(wordPart).forEach(w => result.push(w));
+                return;
+            }
+            const hyphenMatch = line.match(/^(.+?)\s+-\s+/);
+            if (hyphenMatch) {
+                extractWordsFromFirstField(hyphenMatch[1].trim()).forEach(w => result.push(w));
+            }
+        });
+        return result;
+    }
+
+    function extractDictionaryHeadwords() {
+        const contentArea = $('#mw-content-text').clone();
+        contentArea.find('.printfooter, .mw-editsection, style, script, .prp-page-header, .prp-page-footer').remove();
+
+        const allWords = [
+            ...extractHeadwordsFromTables(contentArea),
+            ...extractHeadwordsFromNormalText(contentArea)
+        ];
+
+        const uniqueWords = [];
+        const seen = new Set();
+        allWords.forEach(function (word) {
+            word = normalizeWord(word);
+            if (!word || !containsScript(word)) return;
+            if (!seen.has(word)) {
+                seen.add(word);
+                uniqueWords.push(word);
+            }
+        });
+        return uniqueWords;
+    }
+
+    // ========================================================
+    // 8. பொத்தான் சேர்த்தல்
+    // ========================================================
+
+    function addImportButton() {
+        if ($('#import-lexeme-btn').length > 0) return;
+
+        const btn = $('<button>', {
+            id: 'import-lexeme-btn',
+            text: T.button
+        }).css({
+            'margin': '10px 0',
+            'padding': '8px 12px',
+            'background-color': '#00af89',
+            'color': '#fff',
+            'border': 'none',
+            'border-radius': '4px',
+            'cursor': 'pointer',
+            'font-weight': 'bold',
+            'z-index': '9999'
+        });
+
+        btn.click(processDictionaryPage);
+
+        if ($('#bodyContent').length) {
+            $('#bodyContent').prepend(btn);
+        } else {
+            $('#mw-content-text').before(btn);
+        }
+    }
+
+    // ========================================================
+    // 9. பக்கச் செயலாக்கம்
+    // ========================================================
+
+    function processDictionaryPage() {
+        currentUser = mw.config.get('wgUserName');
+        if (!currentUser) {
+            alert(T.loginRequired);
+            return;
+        }
+
+        rawHeadwordsList = [];
+        filteredLexemesList = [];
+        currentIndex = 0;
+        skippedCount = 0;
+
+        const words = extractDictionaryHeadwords();
+        words.forEach(w => addHeadword(w));
+
+        if (rawHeadwordsList.length === 0) {
+            alert(T.noWords);
+            return;
+        }
+
+        $('#import-lexeme-btn').text(T.buttonBusy).prop('disabled', true);
+
+        getWikidataToken()
+            .then(() => filterUncreatedLexemes())
+            .then(function () {
+                if (filteredLexemesList.length === 0) {
+                    alert(T.allExist);
+                    $('#import-lexeme-btn').text(T.button).prop('disabled', false);
+                    return Promise.reject('STOP');
+                }
+                return batchFetchWiktionaryPOS();
+            })
+            .then(function (completed) {
+                if (completed === false) return;
+                showInteractiveModal();
+            })
+            .catch(function (error) {
+                if (error === 'STOP') return;
+                console.error(error);
+                $('#import-lexeme-btn').text(T.button).prop('disabled', false);
+                alert(T.apiError + '\n\n' + (error.message || error));
+            });
+    }
+
+    // ========================================================
+    // 10. CSRF token
+    // ========================================================
+
+    function getWikidataToken() {
+        return wikidataApi.get({
+            action: 'query',
+            meta: 'tokens',
+            type: 'csrf',
+            assert: 'user',
+            formatversion: 2
+        }).then(function (data) {
+            if (data && data.query && data.query.tokens && data.query.tokens.csrftoken) {
+                csrfToken = data.query.tokens.csrftoken;
+                return true;
+            }
+            throw new Error(T.errToken);
+        });
+    }
+
+    // ========================================================
+    // 11. ஏற்கனவே உள்ள lexeme சரிபார்ப்பு
+    // ========================================================
+
+    function checkExactWikidataLexeme(word) {
+        return wikidataApi.get({
+            action: 'wbsearchentities',
+            search: word,
+            language: SITE_LANG,
+            type: 'lexeme',
+            limit: 20,
+            formatversion: 2
+        }).then(function (data) {
+            if (!data || !Array.isArray(data.search)) return false;
+            const norm = normalizeWord(word);
+            return data.search.some(function (result) {
+                const label = normalizeWord(result.label || '');
+                return label === norm;
+            });
+        });
+    }
+
+    function filterUncreatedLexemes() {
+        const promises = rawHeadwordsList.map(function (item) {
+            return checkExactWikidataLexeme(item.lemma)
+                .then(exists => (!exists ? item : null))
+                .catch(function (err) {
+                    console.warn('Wikidata check failed:', item.lemma, err);
+                    return item;
+                });
+        });
+
+        return Promise.all(promises).then(function (results) {
+            filteredLexemesList = results.filter(Boolean);
+            $('#import-lexeme-btn').text(T.button).prop('disabled', false);
+            return true;
+        });
+    }
+
+    // ========================================================
+    // 12. Wiktionary தரவு
+    // ========================================================
+
+    function getWiktionaryPage(word) {
+        return wiktionaryApi.get({
+            action: 'query',
+            titles: word,
+            redirects: 1,
+            prop: 'info|revisions',
+            rvprop: 'content',
+            rvslots: 'main',
+            formatversion: 2
+        }).then(function (data) {
+            if (!data || !data.query || !Array.isArray(data.query.pages)) {
+                return { exists: false, content: '' };
+            }
+            const page = data.query.pages[0];
+            if (!page || page.missing !== undefined) {
+                return { exists: false, content: '' };
+            }
+            let content = '';
+            try {
+                if (page.revisions && page.revisions[0] && page.revisions[0].slots && page.revisions[0].slots.main) {
+                    content = page.revisions[0].slots.main.content || '';
+                } else if (page.revisions && page.revisions[0]) {
+                    content = page.revisions[0].content || '';
+                }
+            } catch (e) { content = ''; }
+            return { exists: true, content: content, title: page.title || word };
+        });
+    }
+
+    function detectLexicalCategory(content) {
+        if (!content || !CONFIG) return 'Q1084';
+        const posMap = CONFIG.pos;
+        for (const qid in posMap) {
+            const templates = posMap[qid];
+            for (let i = 0; i < templates.length; i++) {
+                const t = templates[i];
+                if (content.includes('{{' + t + '}}') ||
+                    content.includes('===' + t + '===') ||
+                    content.includes('=== ' + t + ' ===') ||
+                    content.includes('==' + t + '==')) {
+                    return qid;
+                }
+            }
+        }
+        return 'Q1084';
+    }
+
+    function batchFetchWiktionaryPOS() {
+        const promises = filteredLexemesList.map(function (item) {
+            return getWiktionaryPage(item.lemma)
+                .then(function (result) {
+                    if (result.exists) {
+                        item.inWiktionary = true;
+                        item.wiktionaryContent = result.content || '';
+                        item.wiktionaryTitle = result.title || item.lemma;
+                        item.lexicalCategory = detectLexicalCategory(result.content);
+                    } else {
+                        item.inWiktionary = false;
+                        item.wiktionaryContent = '';
+                        item.wiktionaryTitle = item.lemma;
+                    }
+                    return item;
+                })
+                .catch(function (err) {
+                    console.warn('Wiktionary check failed:', item.lemma, err);
+                    item.inWiktionary = false;
+                    item.wiktionaryContent = '';
+                    return item;
+                });
+        });
+        return Promise.all(promises).then(() => true);
+    }
+
+    // ========================================================
+    // 13. Commons ஒலி
+    // ========================================================
+
+    function checkCommonsAudioFile(fileName) {
+        if (!fileName) return Promise.resolve(null);
+        return commonsApi.get({
+            action: 'query',
+            titles: 'File:' + fileName,
+            prop: 'imageinfo',
+            iiprop: 'mime',
+            formatversion: 2
+        }).then(function (data) {
+            if (!data || !data.query || !Array.isArray(data.query.pages)) return null;
+            const page = data.query.pages[0];
+            if (!page || page.missing !== undefined || !page.imageinfo || !page.imageinfo.length) return null;
+            const mime = (page.imageinfo[0].mime || '').toLowerCase();
+            return mime.indexOf('audio/') === 0 ? fileName : null;
+        }).catch(function (err) {
+            console.warn('Commons audio check failed:', fileName, err);
+            return null;
+        });
+    }
+
+    function findStandardCommonsAudio(word) {
+        const candidates = AUDIO_EXTENSIONS.map(ext => AUDIO_PREFIX + '-' + word + '.' + ext);
+        return commonsApi.get({
+            action: 'query',
+            titles: candidates.join('|'),
+            prop: 'imageinfo',
+            iiprop: 'mime',
+            formatversion: 2
+        }).then(function (data) {
+            if (!data || !data.query || !Array.isArray(data.query.pages)) return null;
+            for (let i = 0; i < data.query.pages.length; i++) {
+                const page = data.query.pages[i];
+                if (!page || page.missing !== undefined || !page.imageinfo || !page.imageinfo.length) continue;
+                const mime = (page.imageinfo[0].mime || '').toLowerCase();
+                if (mime.indexOf('audio/') === 0) {
+                    return (page.title || '').replace(/^File:/i, '');
+                }
+            }
+            return null;
+        }).catch(function (err) {
+            console.warn('Commons standard audio search failed:', word, err);
+            return null;
+        });
+    }
+
+    function extractAudioFilesFromWiktionary(content) {
+        if (!content) return [];
+        const results = [];
+        // அனைத்து மொழி File: namespaces உம் சேர்த்து
+        const nsPattern = FILE_NAMESPACES.map(ns => ns.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+        const regex = new RegExp(
+            '(?:commons\\s*:\\s*)?(?:' + nsPattern + ')\\s*:\\s*([^|\\]\\n<>"]+\\.(?:' + AUDIO_EXTENSIONS.join('|') + '))',
+            'gi'
+        );
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+            const fileName = match[1].trim();
+            if (fileName && !results.includes(fileName)) results.push(fileName);
+        }
+        return results;
+    }
+
+    function findWiktionaryAudio(content) {
+        const files = extractAudioFilesFromWiktionary(content);
+        if (!files.length) return Promise.resolve(null);
+        let promise = Promise.resolve(null);
+        files.forEach(function (fileName) {
+            promise = promise.then(function (found) {
+                if (found) return found;
+                return checkCommonsAudioFile(fileName);
+            });
+        });
+        return promise;
+    }
+
+    function findCommonsPronunciationAudio(word, wiktionaryContent) {
+        return findStandardCommonsAudio(word).then(function (standardAudio) {
+            if (standardAudio) return standardAudio;
+            return findWiktionaryAudio(wiktionaryContent);
+        });
+    }
+
+    // ========================================================
+    // 14. P443 claim
+    // ========================================================
+
+    function buildPronunciationAudioClaim(audioFileName) {
+        return {
+            mainsnak: {
+                snaktype: 'value',
+                property: P443_PRONUNCIATION_AUDIO,
+                datavalue: { value: audioFileName, type: 'string' }
+            },
+            type: 'statement',
+            rank: 'normal',
+            qualifiers: {
+                P407: [{
+                    snaktype: 'value',
+                    property: P407_LANGUAGE,
+                    datavalue: {
+                        value: {
+                            'entity-type': 'item',
+                            'numeric-id': CURRENT_LANG_NUMERIC,
+                            'id': CURRENT_LANG_QID
+                        },
+                        type: 'wikibase-entityid'
+                    }
+                }]
+            },
+            'qualifiers-order': ['P407']
+        };
+    }
+
+    // ========================================================
+    // 15. மாதிரி UI
+    // ========================================================
+
+    function showInteractiveModal() {
+        $('#lexeme-modal-overlay').remove();
+
+        const wordsOverview = filteredLexemesList.map((item, idx) =>
+            (idx + 1) + '. ' + escapeHtml(item.lemma)
+        ).join(', ');
+
+        const modalHTML = `
+            <div id="lexeme-modal-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; font-family:sans-serif;">
+                <div style="background:#fff; width:520px; max-width:92%; max-height:90vh; overflow-y:auto; padding:24px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); position:relative;">
+                    <button id="modal-close-btn" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:18px; cursor:pointer;">✖</button>
+
+                    <div style="font-size:13px; color:#555; background:#f8f9fa; padding:8px; border-radius:4px; margin-bottom:12px; max-height:70px; overflow-y:auto;">
+                        <strong>${T.notInWikidata} (${filteredLexemesList.length}):</strong><br>${wordsOverview}
+                    </div>
+
+                    <h2 style="margin-top:0; font-size:20px; border-bottom:1px solid #ccc; padding-bottom:8px;">
+                        ${T.newLexeme} (<span id="current-step-num">1</span>/${filteredLexemesList.length})
+                    </h2>
+
+                    <div id="wiktionary-status-box" style="padding:10px; font-size:12px; border-radius:4px; margin-bottom:12px; background:#eaf3ff; border:1px solid #36c; color:#000;">
+                        ${T.wiktionaryLoading}
+                    </div>
+
+                    <div id="audio-status-box" style="padding:10px; font-size:12px; border-radius:4px; margin-bottom:12px; background:#f8f9fa; border:1px solid #ccc; color:#555;">
+                        ${T.audioPending}
+                    </div>
+
+                    <form id="lexeme-form" style="display:flex; flex-direction:column; gap:12px;">
+                        <div>
+                            <label style="font-weight:bold; display:block; margin-bottom:4px;">${T.lemmaLabel}</label>
+                            <input type="text" id="input-lemma" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;" required />
+                        </div>
+                        <div>
+                            <label style="font-weight:bold; display:block; margin-bottom:4px;">${T.langLabel}</label>
+                            <input type="text" id="input-language" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;" required />
+                        </div>
+                        <div>
+                            <label style="font-weight:bold; display:block; margin-bottom:4px;">${T.catLabel}</label>
+                            <input type="text" id="input-category" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;" required />
+                        </div>
+
+                        <p style="font-size:11px; color:#555; margin:4px 0;">${T.cc0Notice}</p>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                            <button type="button" id="skip-lexeme-btn" style="padding:8px 16px; background:#72777d; color:#fff; border:none; border-radius:4px; cursor:pointer;">${T.skip}</button>
+                            <button type="button" id="submit-lexeme-btn" style="padding:8px 16px; background:#36c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">${T.createLexeme}</button>
+                        </div>
+                    </form>
+
+                    <div id="status-msg" style="margin-top:10px; font-weight:bold; font-size:13px; text-align:center;"></div>
+                </div>
+            </div>
+        `;
+
+        $('body').append(modalHTML);
+        loadCurrentWordToForm();
+
+        $('#modal-close-btn').click(function () { $('#lexeme-modal-overlay').remove(); });
+        $('#submit-lexeme-btn').click(submitCurrentLexeme);
+        $('#skip-lexeme-btn').click(function () { skippedCount++; nextWord(); });
+    }
+
+    function loadCurrentWordToForm() {
+        const item = filteredLexemesList[currentIndex];
+        if (!item) return;
+
+        $('#current-step-num').text(currentIndex + 1);
+        $('#input-lemma').val(item.lemma);
+        $('#input-language').val(CURRENT_LANG_QID);
+        $('#input-category').val(item.lexicalCategory);
+
+        $('#submit-lexeme-btn').prop('disabled', false).text(T.createLexeme);
+        $('#skip-lexeme-btn').prop('disabled', false);
+        $('#status-msg').text('').css('color', '#00af89');
+
+        $('#audio-status-box').css({ background: '#f8f9fa', borderColor: '#ccc', color: '#555' })
+            .html(T.audioPending);
+
+        const statusBox = $('#wiktionary-status-box');
+
+        if (item.inWiktionary) {
+            const url = 'https://' + SITE_LANG + '.wiktionary.org/wiki/' +
+                encodeURIComponent(item.wiktionaryTitle || item.lemma);
+            statusBox.css({ background: '#e6f9ed', borderColor: '#00af89', color: '#006633' })
+                .html('📚 ' + T.wiktionaryFound + ': <a href="' + url +
+                    '" target="_blank" style="color:#006633; text-decoration:underline;"><strong>' +
+                    escapeHtml(item.lemma) + '</strong></a><br>' + T.grammar + ': <strong>' +
+                    escapeHtml(item.lexicalCategory) + '</strong>');
+        } else {
+            statusBox.css({ background: '#fffbe6', borderColor: '#fc0', color: '#000' })
+                .html('⚠️ ' + T.wiktionaryNotFound + ' <strong>' + escapeHtml(item.lexicalCategory) + '</strong>');
+        }
+    }
+
+    // ========================================================
+    // 16. Lexeme உருவாக்கம்
+    // ========================================================
+
+    function createLexeme(lemmaVal, langVal, catVal, audioFileName) {
+        const lexemeData = {
+            type: 'lexeme',
+            lemmas: {},
+            lexicalCategory: catVal,
+            language: langVal,
+            forms: [{
+                add: '',
+                representations: {},
+                grammaticalFeatures: []
+            }]
+        };
+        lexemeData.lemmas[SITE_LANG] = { value: lemmaVal, language: SITE_LANG };
+        lexemeData.forms[0].representations[SITE_LANG] = { language: SITE_LANG, value: lemmaVal };
+
+        return wikidataApi.post({
+            action: 'wbeditentity',
+            new: 'lexeme',
+            data: JSON.stringify(lexemeData),
+            summary: 'Created from Wikisource (' + SITE_LANG + ') | User: ' + currentUser,
+            token: csrfToken,
+            assert: 'user',
+            format: 'json'
+        }).then(function (data) {
+            if (!data || !data.success || !data.entity || !data.entity.id) {
+                throw new Error((data && data.error && data.error.info) || T.errCreate);
+            }
+            const lexemeId = data.entity.id;
+            if (!audioFileName) {
+                return { lexemeId: lexemeId, formId: null, audioFileName: null };
+            }
+            return getFirstFormId(lexemeId).then(function (formId) {
+                if (!formId) throw new Error(T.errNoForm);
+                return addPronunciationToForm(formId, audioFileName).then(function () {
+                    return { lexemeId: lexemeId, formId: formId, audioFileName: audioFileName };
+                });
+            });
+        });
+    }
+
+    function getFirstFormId(lexemeId) {
+        return wikidataApi.get({
+            action: 'wbgetentities',
+            ids: lexemeId,
+            props: 'forms',
+            formatversion: 2
+        }).then(function (data) {
+            if (!data || !data.entities) return null;
+            const entity = data.entities[lexemeId];
+            if (!entity || !entity.forms) return null;
+            if (Array.isArray(entity.forms)) {
+                return (entity.forms.length && entity.forms[0].id) ? entity.forms[0].id : null;
+            }
+            const keys = Object.keys(entity.forms);
+            return keys.length ? keys[0] : null;
+        });
+    }
+
+    function addPronunciationToForm(formId, audioFileName) {
+        const claim = buildPronunciationAudioClaim(audioFileName);
+        return wikidataApi.post({
+            action: 'wbeditentity',
+            id: formId,
+            data: JSON.stringify({ claims: [claim] }),
+            summary: 'Added pronunciation audio from Commons | ' + audioFileName,
+            token: csrfToken,
+            assert: 'user',
+            format: 'json'
+        }).then(function (data) {
+            if (!data || !data.success) {
+                throw new Error((data && data.error && data.error.info) || T.errP443);
+            }
+            return true;
+        });
+    }
+
+    // ========================================================
+    // 17. சமர்ப்பிப்பு
+    // ========================================================
+
+    function submitCurrentLexeme() {
+        const lemmaVal = $('#input-lemma').val().trim();
+        const langVal = extractQID($('#input-language').val().trim());
+        const catVal = extractQID($('#input-category').val().trim());
+
+        if (!lemmaVal || !langVal || !catVal) {
+            alert(T.fillAll);
+            return;
+        }
+
+        $('#submit-lexeme-btn').prop('disabled', true).text(T.creating2);
+        $('#skip-lexeme-btn').prop('disabled', true);
+        $('#status-msg').text(T.audioSearching).css('color', '#00af89');
+
+        const item = filteredLexemesList[currentIndex];
+
+        findCommonsPronunciationAudio(lemmaVal, item ? item.wiktionaryContent : '')
+            .then(function (audioFileName) {
+                if (audioFileName) {
+                    $('#audio-status-box').css({ background: '#e6f9ed', borderColor: '#00af89', color: '#006633' })
+                        .html(T.audioFound + ': <strong>' + escapeHtml(audioFileName) + '</strong>');
+                    $('#status-msg').text(T.creating).css('color', '#00af89');
+                } else {
+                    $('#audio-status-box').css({ background: '#fffbe6', borderColor: '#fc0', color: '#665500' })
+                        .html(T.audioNotFound);
+                    $('#status-msg').text(T.creating).css('color', '#00af89');
+                }
+                return createLexeme(lemmaVal, langVal, catVal, audioFileName);
+            })
+            .then(function (result) {
+                if (!result) return;
+                let message = T.success + ': ' + escapeHtml(lemmaVal) + ' (' + result.lexemeId + ') ' + T.created + '!';
+                if (result.audioFileName && result.formId) {
+                    message += ' 🔊 P443: ' + escapeHtml(result.audioFileName);
+                }
+                $('#status-msg').html(message).css('color', 'green');
+
+                const lexemeUrl = 'https://www.wikidata.org/wiki/' + result.lexemeId;
+                let linkHtml = '<a href="' + lexemeUrl + '" target="_blank" style="color:#36c;">' + result.lexemeId + '</a>';
+                if (result.formId) {
+                    const formUrl = 'https://www.wikidata.org/wiki/' + result.formId;
+                    linkHtml += ' / <a href="' + formUrl + '" target="_blank" style="color:#36c;">' + result.formId + '</a>';
+                }
+                $('#status-msg').append('<br>' + linkHtml);
+
+                setTimeout(nextWord, 1200);
+            })
+            .catch(function (error) {
+                console.error(error);
+                $('#status-msg').text('❌ ' + (error.message || error)).css('color', 'red');
+                $('#submit-lexeme-btn').prop('disabled', false).text(T.createLexeme);
+                $('#skip-lexeme-btn').prop('disabled', false);
+            });
+    }
+
+    // ========================================================
+    // 18. அடுத்த சொல்
+    // ========================================================
+
+    function nextWord() {
+        currentIndex++;
+        if (currentIndex < filteredLexemesList.length) {
+            loadCurrentWordToForm();
+            return;
+        }
+        $('#lexeme-modal-overlay').remove();
+        if (skippedCount > 0) {
+            alert(T.allDone + '\n(Skipped: ' + skippedCount + ')');
+        } else {
+            alert(T.allDone);
+        }
+    }
+
+    // ========================================================
+    // 19. துவக்கம்
+    // ========================================================
+
+    mw.loader.using('mediawiki.ForeignApi').then(function () {
+        if (!CONFIG) {
+            console.warn('[LexemeCreator] No LANG_CONFIG for "' + SITE_LANG + '". Using English defaults.');
+        }
+        initializeApis();
+        $(document).ready(addImportButton);
+    });
+
+})();
