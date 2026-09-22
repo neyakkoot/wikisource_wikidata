@@ -1,0 +1,1160 @@
+// ============================================================
+// WikiSource Universal Lexeme Creator with Forms + Senses
+// Tamil Phonetic Sandhi Rules Engine Integration
+// ============================================================
+
+(function () {
+    'use strict';
+
+    // ========================================================
+    // 1. மொழி உள்ளமைவு
+    // ========================================================
+
+    const LANG_CONFIG = {
+        ta: {
+            qid: 'Q5885',
+            code: 'ta',
+            script: /[\u0B80-\u0BFF]/,
+            audioPrefix: 'Ta',
+            pos: {
+                Q1084: ['பெயர்ச்சொல்', 'noun'],
+                Q24905: ['வினைச்சொல்', 'verb'],
+                Q34698: ['பெயரடை', 'adjective'],
+                Q38005: ['வினையடை', 'adverb']
+            },
+            fileNamespaces: ['File', 'படிமம்'],
+            declension: true,
+            strings: {
+                button: 'அகராதிச் சொற்களை விக்கித்தரவில் இணை',
+                buttonBusy: 'விக்கித்தரவு சரிபார்க்கப்படுகிறது...',
+                loginRequired: 'இந்தப் பங்களிப்பு உங்கள் கணக்கில் சேர நீங்கள் முதலில் உள்நுழைய வேண்டும்.',
+                noWords: 'அகராதித் தலைப்புச் சொற்கள் எதுவும் கண்டறியப்படவில்லை.',
+                allExist: 'இப்பக்கத்தில் உள்ள அனைத்து அகராதிச் சொற்களும் ஏற்கனவே விக்கித்தரவில் உருவாக்கப்பட்டுவிட்டன!',
+                apiError: 'API தொடர்பில் பிழை ஏற்பட்டுள்ளது.',
+                wiktionaryLoading: '📖 விக்சனரித் தரவு ஏற்றப்படுகிறது...',
+                wiktionaryFound: '📚 விக்சனரியில் இச்சொல் உள்ளது',
+                wiktionaryNotFound: '⚠️ விக்சனரியில் இச்சொல் இல்லை. இயல்புநிலை வகை பயன்படுத்தப்பட்டது.',
+                grammar: 'இலக்கண வகை',
+                audioPending: '🔊 Commons ஒலிக்கோப்பு: <strong>உருவாக்கும்போது சரிபார்க்கப்படும்</strong>',
+                audioSearching: '🔎 Commons-ல் ஒலிக்கோப்பு தேடப்படுகிறது...',
+                audioFound: '🔊 Commons ஒலிக்கோப்பு கண்டறியப்பட்டது',
+                audioNotFound: '🔇 Commons-ல் பொருத்தமான ஒலிக்கோப்பு கிடைக்கவில்லை. Lexeme + Form மட்டும் உருவாக்கப்படும்.',
+                creating: 'Lexeme + Forms + Senses உருவாக்கப்படுகிறது...',
+                success: 'வெற்றி',
+                created: 'உருவாக்கப்பட்டது',
+                skip: 'தவிர் (Skip)',
+                createLexeme: 'Create Lexeme',
+                creating2: 'உருவாக்கப்படுகிறது...',
+                fillAll: 'அனைத்துப் புலங்களையும் நிரப்பவும்.',
+                allDone: 'அனைத்துப் புதிய சொற்களும் வெற்றிகரமாக உருவாக்கப்பட்டு முடிவடைந்தன!',
+                notInWikidata: 'விக்கித்தரவில் இல்லாத சொற்கள்',
+                newLexeme: 'Create a new Lexeme',
+                lemmaLabel: 'Lemma *',
+                langLabel: 'Lexeme\'s language *',
+                catLabel: 'Lexical category *',
+                formsLabel: 'Forms (வேற்றுமை வடிவங்கள்)',
+                sensesLabel: 'Senses (பொருள் விளக்கங்கள்)',
+                autoDeclensionLabel: 'தமிழ் வேற்றுமை வடிவங்களைத் தானாக உருவாக்கு',
+                cc0Notice: 'By clicking "Create Lexeme", you agree to the terms of use, and you irrevocably agree to release your contribution under the Creative Commons CC0 License.',
+                errToken: 'விக்கித்தரவு CSRF token பெற முடியவில்லை.',
+                errCreate: 'Lexeme உருவாக்க முடியவில்லை.',
+                errNoForm: 'Lexeme உருவாக்கப்பட்டது; ஆனால் Form ID பெற முடியவில்லை.',
+                errP443: 'P443 சேர்க்க முடியவில்லை.'
+            }
+        },
+        en: {
+            qid: 'Q1860', code: 'en', script: /[A-Za-z]/, audioPrefix: 'En',
+            pos: { Q1084: ['noun'], Q24905: ['verb'], Q34698: ['adjective'], Q38005: ['adverb'] },
+            fileNamespaces: ['File'], declension: false,
+            strings: {
+                button: 'Import Headwords to Wikidata',
+                buttonBusy: 'Checking Wikidata...',
+                loginRequired: 'Please log in to use this tool.',
+                noWords: 'No dictionary headwords detected.',
+                allExist: 'All headwords on this page already exist on Wikidata!',
+                apiError: 'API Error:',
+                wiktionaryLoading: '📖 Loading Wiktionary data...',
+                wiktionaryFound: '📚 Found on Wiktionary',
+                wiktionaryNotFound: '⚠️ Not found on Wiktionary. Defaulting category.',
+                grammar: 'Part of speech',
+                audioPending: '🔊 Commons audio: <strong>will be checked on creation</strong>',
+                audioSearching: '🔎 Searching audio on Commons...',
+                audioFound: '🔊 Commons audio found',
+                audioNotFound: '🔇 No matching audio found on Commons.',
+                creating: 'Creating Lexeme + Forms + Senses...',
+                success: 'Success', created: 'created',
+                skip: 'Skip', createLexeme: 'Create Lexeme',
+                creating2: 'Creating...',
+                fillAll: 'Please fill in all fields.',
+                allDone: 'All new headwords created successfully!',
+                notInWikidata: 'Headwords not in Wikidata',
+                newLexeme: 'Create a new Lexeme',
+                lemmaLabel: 'Lemma *', langLabel: 'Lexeme\'s language *',
+                catLabel: 'Lexical category *',
+                formsLabel: 'Forms', sensesLabel: 'Senses',
+                autoDeclensionLabel: 'Auto-generate declension forms',
+                cc0Notice: 'By clicking "Create Lexeme", you agree to the CC0 License.',
+                errToken: 'Failed to retrieve CSRF token.',
+                errCreate: 'Lexeme creation failed.',
+                errNoForm: 'Form ID could not be retrieved.',
+                errP443: 'Failed to add P443.'
+            }
+        }
+    };
+
+    const SITE_LANG = (mw.config.get('wgContentLanguage') || 'en').toLowerCase();
+    const CONFIG = LANG_CONFIG[SITE_LANG] || LANG_CONFIG.en;
+    const T = CONFIG.strings;
+    const CURRENT_LANG_QID = CONFIG.qid;
+    const CURRENT_LANG_CODE = CONFIG.code;
+    const CURRENT_LANG_NUMERIC = parseInt(CURRENT_LANG_QID.replace(/^Q/, ''), 10);
+    const SCRIPT_RE = CONFIG.script;
+    const AUDIO_PREFIX = CONFIG.audioPrefix;
+    const FILE_NAMESPACES = CONFIG.fileNamespaces;
+    const DECLENSION_ENABLED = CONFIG.declension === true;
+
+    const P443_PRONUNCIATION_AUDIO = 'P443';
+    const P407_LANGUAGE = 'P407';
+    const AUDIO_EXTENSIONS = ['ogg', 'oga', 'opus', 'wav', 'flac', 'mp3'];
+
+    // ========================================================
+    // 2. இலக்கண அம்சங்கள் (Wikidata QID)
+    // ========================================================
+
+    const GRAM_FEATURES = {
+        SINGULAR: 'Q110786',
+        PLURAL: 'Q146786',
+        NOMINATIVE: 'Q131105',
+        ACCUSATIVE: 'Q146078',
+        INSTRUMENTAL: 'Q192997',
+        DATIVE: 'Q145599',
+        ABLATIVE: 'Q156986',
+        GENITIVE: 'Q146233',
+        LOCATIVE: 'Q202142',
+        VOCATIVE: 'Q185077'
+    };
+
+    // ========================================================
+    // 3. தமிழ் சந்தி / உடம்படுமெய் சேர்க்கை எஞ்சின் (Sandhi Engine)
+    // ========================================================
+
+    // உடம்படுமெய் இணைவு அட்டவணை (Phonetic Consonant-Vowel Combination)
+    const Y_COMBINATIONS = {
+        'ஐ': 'யை',
+        'ஆல்': 'யால்',
+        'இலிருந்து': 'யிலிருந்து',
+        'இன்': 'யின்',
+        'இல்': 'யில்',
+        'ஏ': 'யே',
+        'அ': 'ய',
+        'ஆ': 'யா',
+        'இ': 'யி',
+        'ஈ': 'யீ',
+        'உ': 'யு',
+        'ஊ': 'யூ',
+        'எ': 'யெ',
+        'ஒ': 'யொ',
+        'ஓ': 'யோ'
+    };
+
+    const V_COMBINATIONS = {
+        'ஐ': 'வை',
+        'ஆல்': 'வால்',
+        'இலிருந்து': 'விலிருந்து',
+        'இன்': 'வின்',
+        'இல்': 'வில்',
+        'ஏ': 'வே',
+        'அ': 'வ',
+        'ஆ': 'வா',
+        'இ': 'வி',
+        'ஈ': 'வீ',
+        'உ': 'வு',
+        'ஊ': 'வூ',
+        'எ': 'வெ',
+        'ஒ': 'வொ',
+        'ஓ': 'வோ'
+    };
+
+    /**
+     * நன்னூல் விதி: "இ ஈ ஐ வழி யவ்வும் ஏனை உயிர்வழி வவ்வும்"
+     */
+    function getGlideType(word) {
+        if (!word) return 'y';
+        const lastChar = word.slice(-1);
+
+        // 'இ', 'ஈ', 'ஐ' உயிரீறுகள் அல்லது அதற்குரிய மாத்திரைக் குறியீடுகள் (ி, ீ, ை)
+        if (['இ', 'ஈ', 'ஐ', 'ி', 'ீ', 'ை'].includes(lastChar)) {
+            return 'y';
+        }
+        
+        // 'அ', 'ஆ', 'உ', 'ஊ', 'எ', 'ஏ', 'ஒ', 'ஓ' போன்றவை -> 'v'
+        return 'v';
+    }
+
+    function combineSuffix(word, suffix) {
+        const glide = getGlideType(word);
+        
+        if (glide === 'y') {
+            if (Y_COMBINATIONS[suffix]) {
+                return word + Y_COMBINATIONS[suffix];
+            }
+        } else if (glide === 'v') {
+            if (V_COMBINATIONS[suffix]) {
+                return word + V_COMBINATIONS[suffix];
+            }
+        }
+        
+        return word + suffix;
+    }
+
+    function applyTamilSuffix(word, caseType) {
+        if (!word) return '';
+
+        if (caseType === 'NOMINATIVE') return word;
+
+        const lastChar = word.slice(-1);
+        const lastTwo = word.slice(-2);
+
+        // 'ன்' ஈற்றுச் சொற்கள் (எ.கா: ஐயன் -> ஐயனை, ஐயனால்)
+        if (lastTwo === 'ன்' || lastChar === 'ன்') {
+            const base = (lastChar === '்' && word.slice(-2) === 'ன்') ? word.slice(0, -2) + 'ன' : word;
+            switch (caseType) {
+                case 'ACCUSATIVE':   return base + 'ை';
+                case 'INSTRUMENTAL': return base + 'ால்';
+                case 'DATIVE':       return word + 'ுக்கு';
+                case 'ABLATIVE':     return base + 'ிலிருந்து';
+                case 'GENITIVE':     return base + 'ின்';
+                case 'LOCATIVE':     return base + 'ில்';
+                case 'VOCATIVE':     return base + 'ே';
+            }
+            return word;
+        }
+
+        // 'ம்' ஈற்றுச் சொற்கள் (எ.கா: மரம் -> மரத்தை, மரத்தால்)
+        if (lastTwo === 'ம்' || lastChar === 'ம்') {
+            const base = (lastChar === '்' && word.slice(-2) === 'ம்') ? word.slice(0, -2) + 'த' : word.slice(0, -1) + 'த';
+            switch (caseType) {
+                case 'ACCUSATIVE':   return base + 'தை';
+                case 'INSTRUMENTAL': return base + 'தால்';
+                case 'DATIVE':       return base + 'திற்கு';
+                case 'ABLATIVE':     return base + 'திலிருந்து';
+                case 'GENITIVE':     return base + 'தின்';
+                case 'LOCATIVE':     return base + 'தில்';
+                case 'VOCATIVE':     return base + 'தே';
+            }
+            return word;
+        }
+
+        // 'கு' வேற்றுமை (Dative case)
+        if (caseType === 'DATIVE') {
+            return word + 'க்கு';
+        }
+
+        // உடம்படுமெய் புணர்ச்சி விதிகள் (Accusative, Instrumental, Ablative, Genitive, Locative, Vocative)
+        switch (caseType) {
+            case 'ACCUSATIVE':   return combineSuffix(word, 'ஐ');
+            case 'INSTRUMENTAL': return combineSuffix(word, 'ஆல்');
+            case 'ABLATIVE':     return combineSuffix(word, 'இலிருந்து');
+            case 'GENITIVE':     return combineSuffix(word, 'இன்');
+            case 'LOCATIVE':     return combineSuffix(word, 'இல்');
+            case 'VOCATIVE':     return combineSuffix(word, 'ஏ');
+        }
+
+        return word;
+    }
+
+    const TAMIL_CASES = [
+        { key: 'NOMINATIVE',   qid: GRAM_FEATURES.NOMINATIVE,   label: 'எழுவாய் வேற்றுமை' },
+        { key: 'ACCUSATIVE',   qid: GRAM_FEATURES.ACCUSATIVE,   label: 'செயப்படுபொருள் வேற்றுமை' },
+        { key: 'INSTRUMENTAL', qid: GRAM_FEATURES.INSTRUMENTAL, label: 'கருவி வேற்றுமை' },
+        { key: 'DATIVE',       qid: GRAM_FEATURES.DATIVE,       label: 'கொடை வேற்றுமை' },
+        { key: 'ABLATIVE',     qid: GRAM_FEATURES.ABLATIVE,     label: 'நீங்கல் வேற்றுமை' },
+        { key: 'GENITIVE',     qid: GRAM_FEATURES.GENITIVE,     label: 'உடைமை வேற்றுமை' },
+        { key: 'LOCATIVE',     qid: GRAM_FEATURES.LOCATIVE,     label: 'இட வேற்றுமை' },
+        { key: 'VOCATIVE',     qid: GRAM_FEATURES.VOCATIVE,     label: 'விளி வேற்றுமை' }
+    ];
+
+    function generateTamilForms(lemma) {
+        const forms = [];
+        const base = normalizeWord(lemma);
+        if (!base) return forms;
+
+        // 8 வேற்றுமைகள் (ஒருமை)
+        for (const c of TAMIL_CASES) {
+            const form = applyTamilSuffix(base, c.key);
+            if (!form) continue;
+            forms.push({
+                representation: form,
+                features: [c.qid, GRAM_FEATURES.SINGULAR]
+            });
+        }
+
+        // பன்மை எழுவாய் — 'கள்' சேர்ப்பு
+        let plural = base + 'கள்';
+        if (base.endsWith('ம்')) {
+            plural = base.slice(0, -1) + 'ங்கள்';
+        }
+        
+        if (plural && !forms.some(f => f.representation === plural)) {
+            forms.push({
+                representation: plural,
+                features: [GRAM_FEATURES.NOMINATIVE, GRAM_FEATURES.PLURAL]
+            });
+        }
+
+        return forms;
+    }
+
+    // ========================================================
+    // 4. நிலைக் மாறிகள் & API துவங்கிகள்
+    // ========================================================
+
+    let rawHeadwordsList = [];
+    let filteredLexemesList = [];
+    let currentIndex = 0;
+    let currentUser = '';
+    let skippedCount = 0;
+
+    let wikidataApi = null;
+    let wiktionaryApi = null;
+    let commonsApi = null;
+    let csrfToken = '';
+
+    function initializeApis() {
+        wikidataApi = new mw.ForeignApi('https://www.wikidata.org/w/api.php');
+        wiktionaryApi = new mw.ForeignApi('https://' + SITE_LANG + '.wiktionary.org/w/api.php');
+        commonsApi = new mw.ForeignApi('https://commons.wikimedia.org/w/api.php');
+    }
+
+    function normalizeWord(text) {
+        if (!text) return '';
+        return String(text)
+            .normalize('NFC')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '')
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function containsScript(text) {
+        return SCRIPT_RE.test(text || '');
+    }
+
+    function extractQID(textVal) {
+        if (!textVal) return '';
+        const match = String(textVal).match(/(Q\d+)/i);
+        return match ? match[1].toUpperCase() : String(textVal).trim();
+    }
+
+    function escapeHtml(text) {
+        return String(text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function addHeadword(word) {
+        word = normalizeWord(word);
+        if (!word || !containsScript(word)) return;
+
+        const exists = rawHeadwordsList.some(item =>
+            normalizeWord(item.lemma) === word);
+
+        if (!exists) {
+            rawHeadwordsList.push({
+                lemma: word,
+                language: CURRENT_LANG_QID,
+                lexicalCategory: 'Q1084',
+                inWiktionary: false,
+                wiktionaryContent: '',
+                senses: [],
+                autoForms: DECLENSION_ENABLED
+            });
+        }
+    }
+
+    function extractWordsFromFirstField(text) {
+        if (!text) return [];
+        text = String(text).replace(/\u00A0/g, ' ')
+            .replace(/[\u200B-\u200D\uFEFF]/g, '').normalize('NFC');
+
+        const words = [];
+        const lines = text.split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+
+        lines.forEach(function (line) {
+            if (line.includes('=')) line = line.split('=')[0].trim();
+            const hm = line.match(/^(.+?)\s+-\s+/);
+            if (hm) line = hm[1].trim();
+            line = normalizeWord(line);
+            if (!line) return;
+
+            const m = line.match(new RegExp('^(' + SCRIPT_RE.source + '[\\s\\S]*?)(?:[\\s,;:|]|$)'));
+            if (m) {
+                const w = m[1].trim().replace(/[.,:;|]+$/g, '').trim();
+                if (w && containsScript(w)) words.push(w);
+                return;
+            }
+            if (containsScript(line)) words.push(line);
+        });
+        return words;
+    }
+
+    function extractHeadwordsFromTables(contentArea) {
+        const result = [];
+        contentArea.find('table').each(function () {
+            $(this).find('tr').each(function () {
+                const firstCell = $(this).find('th, td').first();
+                if (firstCell.length) {
+                    extractWordsFromFirstField(firstCell.text())
+                        .forEach(w => result.push(w));
+                }
+            });
+        });
+        return result;
+    }
+
+    function extractHeadwordsFromNormalText(contentArea) {
+        const result = [];
+        const clone = contentArea.clone();
+        clone.find('table, script, style, noscript, .printfooter, .mw-editsection, .prp-page-header, .prp-page-footer').remove();
+        const lines = clone.text().split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+
+        lines.forEach(function (line) {
+            if (!containsScript(line)) return;
+            if (line.includes('=')) {
+                extractWordsFromFirstField(line.split('=')[0].trim())
+                    .forEach(w => result.push(w));
+                return;
+            }
+            const hm = line.match(/^(.+?)\s+-\s+/);
+            if (hm) {
+                extractWordsFromFirstField(hm[1].trim())
+                    .forEach(w => result.push(w));
+            }
+        });
+        return result;
+    }
+
+    function extractDictionaryHeadwords() {
+        const contentArea = $('#mw-content-text').clone();
+        contentArea.find('.printfooter, .mw-editsection, style, script, .prp-page-header, .prp-page-footer').remove();
+
+        const allWords = [
+            ...extractHeadwordsFromTables(contentArea),
+            ...extractHeadwordsFromNormalText(contentArea)
+        ];
+
+        const uniqueWords = [];
+        const seen = new Set();
+        allWords.forEach(function (word) {
+            word = normalizeWord(word);
+            if (!word || !containsScript(word)) return;
+            if (!seen.has(word)) {
+                seen.add(word);
+                uniqueWords.push(word);
+            }
+        });
+        return uniqueWords;
+    }
+
+    function addImportButton() {
+        if ($('#import-lexeme-btn').length > 0) return;
+        const btn = $('<button>', {
+            id: 'import-lexeme-btn',
+            text: T.button
+        }).css({
+            'margin': '10px 0', 'padding': '8px 12px',
+            'background-color': '#00af89', 'color': '#fff',
+            'border': 'none', 'border-radius': '4px',
+            'cursor': 'pointer', 'font-weight': 'bold', 'z-index': '9999'
+        });
+        btn.click(processDictionaryPage);
+        if ($('#bodyContent').length) $('#bodyContent').prepend(btn);
+        else $('#mw-content-text').before(btn);
+    }
+
+    function processDictionaryPage() {
+        currentUser = mw.config.get('wgUserName');
+        if (!currentUser) { alert(T.loginRequired); return; }
+
+        rawHeadwordsList = [];
+        filteredLexemesList = [];
+        currentIndex = 0;
+        skippedCount = 0;
+
+        extractDictionaryHeadwords().forEach(w => addHeadword(w));
+
+        if (rawHeadwordsList.length === 0) {
+            alert(T.noWords);
+            return;
+        }
+
+        $('#import-lexeme-btn').text(T.buttonBusy).prop('disabled', true);
+
+        getWikidataToken()
+            .then(() => filterUncreatedLexemes())
+            .then(function () {
+                if (filteredLexemesList.length === 0) {
+                    alert(T.allExist);
+                    $('#import-lexeme-btn').text(T.button).prop('disabled', false);
+                    return Promise.reject('STOP');
+                }
+                return batchFetchWiktionaryPOS();
+            })
+            .then(function (completed) {
+                if (completed === false) return;
+                showInteractiveModal();
+            })
+            .catch(function (error) {
+                if (error === 'STOP') return;
+                console.error(error);
+                $('#import-lexeme-btn').text(T.button).prop('disabled', false);
+                alert(T.apiError + '\n\n' + (error.message || error));
+            });
+    }
+
+    function getWikidataToken() {
+        return wikidataApi.get({
+            action: 'query', meta: 'tokens', type: 'csrf',
+            assert: 'user', formatversion: 2
+        }).then(function (data) {
+            if (data?.query?.tokens?.csrftoken) {
+                csrfToken = data.query.tokens.csrftoken;
+                return true;
+            }
+            throw new Error(T.errToken);
+        });
+    }
+
+    function checkExactWikidataLexeme(word) {
+        return wikidataApi.get({
+            action: 'wbsearchentities',
+            search: word,
+            language: CURRENT_LANG_CODE,
+            type: 'lexeme',
+            limit: 50,
+            formatversion: 2
+        }).then(function (data) {
+            if (!data || !Array.isArray(data.search) || !data.search.length) return false;
+
+            const ids = data.search
+                .map(r => r.id)
+                .filter(id => /^L\d+$/.test(id));
+            if (!ids.length) return false;
+
+            return wikidataApi.get({
+                action: 'wbgetentities',
+                ids: ids.join('|'),
+                props: 'lemmas|language|lexicalCategory',
+                languages: CURRENT_LANG_CODE,
+                formatversion: 2
+            }).then(function (entityData) {
+                if (!entityData || !entityData.entities) return false;
+                const norm = normalizeWord(word);
+
+                for (const id in entityData.entities) {
+                    const ent = entityData.entities[id];
+                    if (!ent || !ent.lemmas || !ent.lemmas[CURRENT_LANG_CODE]) continue;
+                    const lemmaVal = normalizeWord(ent.lemmas[CURRENT_LANG_CODE].value || '');
+                    if (lemmaVal !== norm) continue;
+                    const langId = ent.language && ent.language.id;
+                    if (langId && langId !== CURRENT_LANG_QID) continue;
+                    return true;
+                }
+                return false;
+            });
+        }).catch(function (err) {
+            console.warn('Lexeme check failed for', word, err);
+            return false;
+        });
+    }
+
+    async function filterUncreatedLexemes() {
+        const concurrency = 5;
+        const results = [];
+        const queue = rawHeadwordsList.slice();
+
+        async function worker() {
+            while (queue.length) {
+                const item = queue.shift();
+                try {
+                    const exists = await checkExactWikidataLexeme(item.lemma);
+                    if (!exists) results.push(item);
+                } catch (err) {
+                    console.warn('Check failed:', item.lemma, err);
+                    results.push(item);
+                }
+            }
+        }
+
+        await Promise.all(Array.from({ length: concurrency }, worker));
+        filteredLexemesList = results;
+        $('#import-lexeme-btn').text(T.button).prop('disabled', false);
+        return true;
+    }
+
+    function getWiktionaryPage(word) {
+        return wiktionaryApi.get({
+            action: 'query', titles: word, redirects: 1,
+            prop: 'info|revisions', rvprop: 'content',
+            rvslots: 'main', formatversion: 2
+        }).then(function (data) {
+            if (!data?.query?.pages?.[0] || data.query.pages[0].missing !== undefined) {
+                return { exists: false, content: '' };
+            }
+            const page = data.query.pages[0];
+            let content = '';
+            try {
+                if (page.revisions?.[0]?.slots?.main?.content)
+                    content = page.revisions[0].slots.main.content;
+                else if (page.revisions?.[0]?.content)
+                    content = page.revisions[0].content;
+            } catch (e) { content = ''; }
+            return { exists: true, content, title: page.title || word };
+        });
+    }
+
+    function detectLexicalCategory(content) {
+        if (!content) return 'Q1084';
+        const posMap = CONFIG.pos;
+        for (const qid in posMap) {
+            for (const t of posMap[qid]) {
+                if (content.includes('{{' + t + '}}') ||
+                    content.includes('===' + t + '===') ||
+                    content.includes('=== ' + t + ' ===')) {
+                    return qid;
+                }
+            }
+        }
+        return 'Q1084';
+    }
+
+    function extractSensesFromWiktionary(content) {
+        if (!content) return [];
+        const senses = [];
+        const lines = content.split(/\r?\n/);
+        let inDefinitions = false;
+
+        lines.forEach(function (line) {
+            const trimmed = line.trim();
+            if (/^==+\s*பொருள்\s*==+/i.test(trimmed) ||
+                /^==+\s*Meaning\s*==+/i.test(trimmed)) {
+                inDefinitions = true;
+                return;
+            }
+            if (inDefinitions) {
+                if (/^==+/.test(trimmed) && !/பொருள்|Meaning/.test(trimmed)) {
+                    inDefinitions = false;
+                    return;
+                }
+                const m = trimmed.match(/^#\s*(?!\*)(.+)$/);
+                if (m && m[1]) {
+                    const gloss = m[1]
+                        .replace(/\[\[([^\]|]+)\|?([^\]]*)\]\]/g, (_, a, b) => b || a)
+                        .replace(/\{\{[^}]*\}\}/g, '').trim();
+                    if (gloss && gloss.length > 0) senses.push(gloss);
+                }
+            }
+        });
+
+        return senses.slice(0, 10);
+    }
+
+    async function batchFetchWiktionaryPOS() {
+        const concurrency = 5;
+        const queue = filteredLexemesList.slice();
+
+        async function worker() {
+            while (queue.length) {
+                const item = queue.shift();
+                try {
+                    const result = await getWiktionaryPage(item.lemma);
+                    if (result.exists) {
+                        item.inWiktionary = true;
+                        item.wiktionaryContent = result.content || '';
+                        item.wiktionaryTitle = result.title || item.lemma;
+                        item.lexicalCategory = detectLexicalCategory(result.content);
+                        item.senses = extractSensesFromWiktionary(result.content);
+                    } else {
+                        item.inWiktionary = false;
+                        item.wiktionaryContent = '';
+                        item.wiktionaryTitle = item.lemma;
+                        item.senses = [];
+                    }
+                } catch (err) {
+                    console.warn('Wiktionary fetch failed:', item.lemma, err);
+                    item.inWiktionary = false;
+                    item.senses = [];
+                }
+            }
+        }
+
+        await Promise.all(Array.from({ length: concurrency }, worker));
+        return true;
+    }
+
+    function checkCommonsAudioFile(fileName) {
+        if (!fileName) return Promise.resolve(null);
+        return commonsApi.get({
+            action: 'query', titles: 'File:' + fileName,
+            prop: 'imageinfo', iiprop: 'mime', formatversion: 2
+        }).then(function (data) {
+            const page = data?.query?.pages?.[0];
+            if (!page || page.missing !== undefined) return null;
+            const mime = (page.imageinfo?.[0]?.mime || '').toLowerCase();
+            return mime.indexOf('audio/') === 0 ? fileName : null;
+        }).catch(() => null);
+    }
+
+    function findStandardCommonsAudio(word) {
+        const candidates = AUDIO_EXTENSIONS.map(ext =>
+            AUDIO_PREFIX + '-' + word + '.' + ext);
+        return commonsApi.get({
+            action: 'query', titles: candidates.join('|'),
+            prop: 'imageinfo', iiprop: 'mime', formatversion: 2
+        }).then(function (data) {
+            const pages = data?.query?.pages || [];
+            for (const page of pages) {
+                if (page.missing !== undefined) continue;
+                const mime = (page.imageinfo?.[0]?.mime || '').toLowerCase();
+                if (mime.indexOf('audio/') === 0) {
+                    return (page.title || '').replace(/^File:/i, '');
+                }
+            }
+            return null;
+        }).catch(() => null);
+    }
+
+    function extractAudioFilesFromWiktionary(content) {
+        if (!content) return [];
+        const results = [];
+        const nsPattern = FILE_NAMESPACES
+            .map(ns => ns.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+            .join('|');
+        const regex = new RegExp(
+            '(?:commons\\s*:\\s*)?(?:' + nsPattern + ')\\s*:\\s*([^|\\]\\n<>"]+\\.(?:' +
+            AUDIO_EXTENSIONS.join('|') + '))', 'gi');
+        let match;
+        while ((match = regex.exec(content)) !== null) {
+            const f = match[1].trim();
+            if (f && !results.includes(f)) results.push(f);
+        }
+        return results;
+    }
+
+    function findCommonsPronunciationAudio(word, wiktionaryContent) {
+        return findStandardCommonsAudio(word).then(function (std) {
+            if (std) return std;
+            const files = extractAudioFilesFromWiktionary(wiktionaryContent);
+            if (!files.length) return null;
+            let promise = Promise.resolve(null);
+            files.forEach(function (f) {
+                promise = promise.then(found => found || checkCommonsAudioFile(f));
+            });
+            return promise;
+        });
+    }
+
+    function buildPronunciationAudioClaim(audioFileName) {
+        return {
+            mainsnak: {
+                snaktype: 'value', property: P443_PRONUNCIATION_AUDIO,
+                datavalue: { value: audioFileName, type: 'string' }
+            },
+            type: 'statement', rank: 'normal',
+            qualifiers: {
+                P407: [{
+                    snaktype: 'value', property: P407_LANGUAGE,
+                    datavalue: {
+                        value: {
+                            'entity-type': 'item',
+                            'numeric-id': CURRENT_LANG_NUMERIC,
+                            'id': CURRENT_LANG_QID
+                        },
+                        type: 'wikibase-entityid'
+                    }
+                }]
+            },
+            'qualifiers-order': ['P407']
+        };
+    }
+
+    function showInteractiveModal() {
+        $('#lexeme-modal-overlay').remove();
+
+        const overview = filteredLexemesList.map((item, idx) =>
+            (idx + 1) + '. ' + escapeHtml(item.lemma)).join(', ');
+
+        const declensionCheckbox = DECLENSION_ENABLED
+            ? `<div style="background:#f0f8ff; padding:8px; border:1px solid #b0d4f1; border-radius:4px;">
+                   <label style="font-size:13px; cursor:pointer;">
+                       <input type="checkbox" id="auto-forms-checkbox" checked />
+                       ${T.autoDeclensionLabel}
+                   </label>
+               </div>`
+            : '';
+
+        const modalHTML = `
+            <div id="lexeme-modal-overlay" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.6); z-index:10000; display:flex; align-items:center; justify-content:center; font-family:sans-serif;">
+                <div style="background:#fff; width:560px; max-width:92%; max-height:90vh; overflow-y:auto; padding:24px; border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.3); position:relative;">
+                    <button id="modal-close-btn" style="position:absolute; top:12px; right:12px; border:none; background:none; font-size:18px; cursor:pointer;">✖</button>
+
+                    <div style="font-size:13px; color:#555; background:#f8f9fa; padding:8px; border-radius:4px; margin-bottom:12px; max-height:70px; overflow-y:auto;">
+                        <strong>${T.notInWikidata} (${filteredLexemesList.length}):</strong><br>${overview}
+                    </div>
+
+                    <h2 style="margin-top:0; font-size:20px; border-bottom:1px solid #ccc; padding-bottom:8px;">
+                        ${T.newLexeme} (<span id="current-step-num">1</span>/${filteredLexemesList.length})
+                    </h2>
+
+                    <div id="wiktionary-status-box" style="padding:10px; font-size:12px; border-radius:4px; margin-bottom:12px; background:#eaf3ff; border:1px solid #36c; color:#000;">
+                        ${T.wiktionaryLoading}
+                    </div>
+
+                    <div id="audio-status-box" style="padding:10px; font-size:12px; border-radius:4px; margin-bottom:12px; background:#f8f9fa; border:1px solid #ccc; color:#555;">
+                        ${T.audioPending}
+                    </div>
+
+                    <form id="lexeme-form" style="display:flex; flex-direction:column; gap:12px;">
+                        <div>
+                            <label style="font-weight:bold; display:block; margin-bottom:4px;">${T.lemmaLabel}</label>
+                            <input type="text" id="input-lemma" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;" required />
+                        </div>
+                        <div>
+                            <label style="font-weight:bold; display:block; margin-bottom:4px;">${T.langLabel}</label>
+                            <input type="text" id="input-language" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;" required />
+                        </div>
+                        <div>
+                            <label style="font-weight:bold; display:block; margin-bottom:4px;">${T.catLabel}</label>
+                            <input type="text" id="input-category" style="width:100%; padding:8px; border:1px solid #ccc; border-radius:4px; box-sizing:border-box;" required />
+                        </div>
+
+                        ${declensionCheckbox}
+
+                        <details id="forms-preview" style="font-size:12px; background:#f8f9fa; padding:8px; border-radius:4px;" open>
+                            <summary style="cursor:pointer; font-weight:bold;">${T.formsLabel}</summary>
+                            <div id="forms-preview-content" style="margin-top:6px; font-family:monospace; font-size:12px; max-height:180px; overflow-y:auto;"></div>
+                        </details>
+
+                        <details id="senses-preview" style="font-size:12px; background:#f8f9fa; padding:8px; border-radius:4px;">
+                            <summary style="cursor:pointer; font-weight:bold;">${T.sensesLabel}</summary>
+                            <div id="senses-preview-content" style="margin-top:6px; font-family:monospace; font-size:11px; max-height:120px; overflow-y:auto;"></div>
+                        </details>
+
+                        <p style="font-size:11px; color:#555; margin:4px 0;">${T.cc0Notice}</p>
+
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                            <button type="button" id="skip-lexeme-btn" style="padding:8px 16px; background:#72777d; color:#fff; border:none; border-radius:4px; cursor:pointer;">${T.skip}</button>
+                            <button type="button" id="submit-lexeme-btn" style="padding:8px 16px; background:#36c; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:bold;">${T.createLexeme}</button>
+                        </div>
+                    </form>
+
+                    <div id="status-msg" style="margin-top:10px; font-weight:bold; font-size:13px; text-align:center;"></div>
+                </div>
+            </div>
+        `;
+
+        $('body').append(modalHTML);
+        loadCurrentWordToForm();
+
+        $('#modal-close-btn').click(() => $('#lexeme-modal-overlay').remove());
+        $('#submit-lexeme-btn').click(submitCurrentLexeme);
+        $('#skip-lexeme-btn').click(function () { skippedCount++; nextWord(); });
+
+        $('#input-lemma').on('input', updatePreviews);
+        if (DECLENSION_ENABLED) {
+            $('#auto-forms-checkbox').on('change', updatePreviews);
+        }
+    }
+
+    function updatePreviews() {
+        const lemma = $('#input-lemma').val().trim();
+        const autoForms = DECLENSION_ENABLED &&
+            $('#auto-forms-checkbox').is(':checked');
+
+        if (autoForms && lemma) {
+            const forms = generateTamilForms(lemma);
+            $('#forms-preview-content').html(
+                forms.map((f, i) =>
+                    (i + 1) + '. <strong>' + escapeHtml(f.representation) +
+                    '</strong> — <span style="color:#888;">' +
+                    f.features.join(', ') + '</span>'
+                ).join('<br>')
+            );
+        } else {
+            $('#forms-preview-content').html('<em>—</em>');
+        }
+
+        const item = filteredLexemesList[currentIndex];
+        const senses = (item && item.senses) ? item.senses : [];
+        if (senses.length) {
+            $('#senses-preview-content').html(
+                senses.map((s, i) =>
+                    (i + 1) + '. ' + escapeHtml(s)
+                ).join('<br>')
+            );
+        } else {
+            $('#senses-preview-content').html('<em>—</em>');
+        }
+    }
+
+    function loadCurrentWordToForm() {
+        const item = filteredLexemesList[currentIndex];
+        if (!item) return;
+
+        $('#current-step-num').text(currentIndex + 1);
+        $('#input-lemma').val(item.lemma);
+        $('#input-language').val(CURRENT_LANG_QID);
+        $('#input-category').val(item.lexicalCategory);
+
+        $('#submit-lexeme-btn').prop('disabled', false).text(T.createLexeme);
+        $('#skip-lexeme-btn').prop('disabled', false);
+        $('#status-msg').text('').css('color', '#00af89');
+        $('#audio-status-box').css({
+            background: '#f8f9fa', borderColor: '#ccc', color: '#555'
+        }).html(T.audioPending);
+
+        const statusBox = $('#wiktionary-status-box');
+        if (item.inWiktionary) {
+            const url = 'https://' + SITE_LANG + '.wiktionary.org/wiki/' +
+                encodeURIComponent(item.wiktionaryTitle || item.lemma);
+            statusBox.css({
+                background: '#e6f9ed', borderColor: '#00af89', color: '#006633'
+            }).html('📚 ' + T.wiktionaryFound + ': <a href="' + url +
+                '" target="_blank" style="color:#006633; text-decoration:underline;"><strong>' +
+                escapeHtml(item.lemma) + '</strong></a><br>' + T.grammar +
+                ': <strong>' + escapeHtml(item.lexicalCategory) + '</strong>');
+        } else {
+            statusBox.css({
+                background: '#fffbe6', borderColor: '#fc0', color: '#000'
+            }).html('⚠️ ' + T.wiktionaryNotFound + ' <strong>' +
+                escapeHtml(item.lexicalCategory) + '</strong>');
+        }
+
+        updatePreviews();
+    }
+
+    function createLexeme(lemmaVal, langVal, catVal, audioFileName, options) {
+        options = options || {};
+        const autoForms = options.autoForms !== false;
+        const item = options.item || {};
+
+        let formsData = [];
+        if (autoForms && DECLENSION_ENABLED && catVal === 'Q1084') {
+            const generated = generateTamilForms(lemmaVal);
+            formsData = generated.map(f => {
+                const rep = {};
+                rep[CURRENT_LANG_CODE] = {
+                    language: CURRENT_LANG_CODE,
+                    value: f.representation
+                };
+                return {
+                    representations: rep,
+                    grammaticalFeatures: f.features.filter(Boolean)
+                };
+            });
+        } else {
+            const rep = {};
+            rep[CURRENT_LANG_CODE] = {
+                language: CURRENT_LANG_CODE,
+                value: lemmaVal
+            };
+            formsData = [{
+                representations: rep,
+                grammaticalFeatures: []
+            }];
+        }
+
+        let sensesData = [];
+        const senseGlosses = (item.senses && item.senses.length)
+            ? item.senses
+            : [lemmaVal];
+        if (senseGlosses.length) {
+            const glosses = {};
+            glosses[CURRENT_LANG_CODE] = {
+                language: CURRENT_LANG_CODE,
+                value: senseGlosses.join('; ')
+            };
+            sensesData.push({ glosses: glosses });
+        }
+
+        const lemmas = {};
+        lemmas[CURRENT_LANG_CODE] = {
+            language: CURRENT_LANG_CODE,
+            value: lemmaVal
+        };
+
+        const lexemeData = {
+            type: 'lexeme',
+            lemmas: lemmas,
+            lexicalCategory: catVal,
+            language: langVal,
+            forms: formsData,
+            senses: sensesData
+        };
+
+        return wikidataApi.post({
+            action: 'wbeditentity',
+            new: 'lexeme',
+            data: JSON.stringify(lexemeData),
+            summary: 'Created from Wikisource (' + SITE_LANG + ') with ' +
+                formsData.length + ' form(s) and ' +
+                sensesData.length + ' sense(s) | User: ' + currentUser,
+            token: csrfToken,
+            assert: 'user',
+            format: 'json'
+        }).then(function (data) {
+            if (!data || !data.success || !data.entity || !data.entity.id) {
+                throw new Error((data?.error?.info) || T.errCreate);
+            }
+            const lexemeId = data.entity.id;
+
+            if (!audioFileName) {
+                return {
+                    lexemeId: lexemeId, formId: null,
+                    audioFileName: null, formsCount: formsData.length,
+                    sensesCount: sensesData.length
+                };
+            }
+
+            return getFirstFormId(lexemeId).then(function (formId) {
+                if (!formId) {
+                    return {
+                        lexemeId: lexemeId, formId: null,
+                        audioFileName: null, formsCount: formsData.length,
+                        sensesCount: sensesData.length
+                    };
+                }
+                return addPronunciationToForm(formId, audioFileName).then(function () {
+                    return {
+                        lexemeId: lexemeId, formId: formId,
+                        audioFileName: audioFileName,
+                        formsCount: formsData.length,
+                        sensesCount: sensesData.length
+                    };
+                });
+            });
+        });
+    }
+
+    function getFirstFormId(lexemeId) {
+        return wikidataApi.get({
+            action: 'wbgetentities', ids: lexemeId,
+            props: 'forms', formatversion: 2
+        }).then(function (data) {
+            const entity = data?.entities?.[lexemeId];
+            if (!entity || !entity.forms) return null;
+            if (Array.isArray(entity.forms)) {
+                return entity.forms.length ? entity.forms[0].id : null;
+            }
+            const keys = Object.keys(entity.forms);
+            return keys.length ? keys[0] : null;
+        });
+    }
+
+    function addPronunciationToForm(formId, audioFileName) {
+        const claim = buildPronunciationAudioClaim(audioFileName);
+        return wikidataApi.post({
+            action: 'wbeditentity', id: formId,
+            data: JSON.stringify({ claims: [claim] }),
+            summary: 'Added pronunciation audio from Commons | ' + audioFileName,
+            token: csrfToken, assert: 'user', format: 'json'
+        }).then(function (data) {
+            if (!data || !data.success) {
+                throw new Error((data?.error?.info) || T.errP443);
+            }
+            return true;
+        });
+    }
+
+    function submitCurrentLexeme() {
+        const lemmaVal = $('#input-lemma').val().trim();
+        const langVal = extractQID($('#input-language').val().trim());
+        const catVal = extractQID($('#input-category').val().trim());
+        const autoForms = DECLENSION_ENABLED
+            ? $('#auto-forms-checkbox').is(':checked')
+            : false;
+
+        if (!lemmaVal || !langVal || !catVal) {
+            alert(T.fillAll);
+            return;
+        }
+
+        $('#submit-lexeme-btn').prop('disabled', true).text(T.creating2);
+        $('#skip-lexeme-btn').prop('disabled', true);
+        $('#status-msg').text(T.audioSearching).css('color', '#00af89');
+
+        const item = filteredLexemesList[currentIndex];
+
+        findCommonsPronunciationAudio(lemmaVal, item ? item.wiktionaryContent : '')
+            .then(function (audioFileName) {
+                if (audioFileName) {
+                    $('#audio-status-box').css({
+                        background: '#e6f9ed', borderColor: '#00af89', color: '#006633'
+                    }).html(T.audioFound + ': <strong>' +
+                        escapeHtml(audioFileName) + '</strong>');
+                } else {
+                    $('#audio-status-box').css({
+                        background: '#fffbe6', borderColor: '#fc0', color: '#665500'
+                    }).html(T.audioNotFound);
+                }
+                $('#status-msg').text(T.creating).css('color', '#00af89');
+
+                return createLexeme(lemmaVal, langVal, catVal, audioFileName, {
+                    autoForms: autoForms,
+                    item: item
+                });
+            })
+            .then(function (result) {
+                if (!result) return;
+                let message = T.success + ': ' + escapeHtml(lemmaVal) +
+                    ' (' + result.lexemeId + ') ' + T.created + '!';
+                message += '<br>📋 Forms: ' + result.formsCount +
+                    ' | Senses: ' + result.sensesCount;
+                if (result.audioFileName && result.formId) {
+                    message += '<br>🔊 P443: ' + escapeHtml(result.audioFileName);
+                }
+                $('#status-msg').html(message).css('color', 'green');
+
+                const lexemeUrl = 'https://www.wikidata.org/wiki/' + result.lexemeId;
+                let linkHtml = '<a href="' + lexemeUrl +
+                    '" target="_blank" style="color:#36c;">' + result.lexemeId + '</a>';
+                if (result.formId) {
+                    const formUrl = 'https://www.wikidata.org/wiki/' + result.formId;
+                    linkHtml += ' / <a href="' + formUrl +
+                        '" target="_blank" style="color:#36c;">' + result.formId + '</a>';
+                }
+                $('#status-msg').append('<br>' + linkHtml);
+
+                setTimeout(nextWord, 1400);
+            })
+            .catch(function (error) {
+                console.error(error);
+                $('#status-msg').text('❌ ' + (error.message || error)).css('color', 'red');
+                $('#submit-lexeme-btn').prop('disabled', false).text(T.createLexeme);
+                $('#skip-lexeme-btn').prop('disabled', false);
+            });
+    }
+
+    function nextWord() {
+        currentIndex++;
+        if (currentIndex < filteredLexemesList.length) {
+            loadCurrentWordToForm();
+            return;
+        }
+        $('#lexeme-modal-overlay').remove();
+        if (skippedCount > 0) {
+            alert(T.allDone + '\n(Skipped: ' + skippedCount + ')');
+        } else {
+            alert(T.allDone);
+        }
+    }
+
+    mw.loader.using('mediawiki.ForeignApi').then(function () {
+        initializeApis();
+        $(document).ready(addImportButton);
+    });
+
+})();
